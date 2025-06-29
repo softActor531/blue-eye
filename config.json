@@ -1,6 +1,8 @@
 {
   "intervalMs": 2000,
-  "uploadUrl": "http://172.20.101.160:8923/client/upload",
+  "serverIP": "172.20.101.1",
   "quality": 70,
-  "idleThreshold": 2
+  "idleThreshold": 2,
+  "port": 8924,
+  "apiPort": 8923
 }
