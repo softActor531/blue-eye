@@ -9,10 +9,12 @@ const config = require('./config.json');
 const { powerMonitor } = require('electron');
 const dgram = require('dgram');
 const client = dgram.createSocket('udp4');
+const localVersion = require('./package.json').version;
 
 let tray = null;
 let win = null;
 let { serverIP, intervalMs, apiPort } = config;
+let remoteVersion = require('./package.json').version;
 
 function setTrayStatus(color = 'gray') {
   const iconPath = path.join(__dirname, 'assets', `icon-${color}.png`);
@@ -88,8 +90,8 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin') app.dock.hide();
 
   win = new BrowserWindow({
-    width: 400,
-    height: 300,
+    width: 300,
+    height: 180,
     show: false,
     frame: true,
     skipTaskbar: true,
@@ -104,8 +106,21 @@ app.whenReady().then(() => {
   setTrayStatus('gray'); // initial
   // tray.setToolTip('Connection not started.');
 
-  // win.loadFile('index.html');
+  tray.on('click', () => {
+    if (win) {
+      app.focus();
+      win.show();
+      win.focus();
+    }
+  });
+
+  win.loadFile('index.html');
   // win.webContents.openDevTools();
+
+  win.on('close', (event) => {
+    event.preventDefault();
+    win.hide();
+  });
 
   const autoLauncher = new AutoLaunch({ name: 'BlueEye' });
   autoLauncher.isEnabled().then(enabled => {
@@ -124,5 +139,19 @@ client.on('message', (msg, rinfo) => {
     serverIP = jsonData.SERVER_IP_ADDRESS || config.serverIP;
     intervalMs = jsonData.CLIENT_SCREENSHOT_INTERVAL || config.intervalMs;
     apiPort = jsonData.CLIENT_API_PORT || config.apiPort;
+    const remoteVersion = jsonData.CLIENT_APP_VERSION || localVersion;
+
+    if (remoteVersion !== localVersion) {
+      if (win && win.webContents) {
+        win.webContents.send('version-mismatch', {
+          local: localVersion,
+          remote: remoteVersion,
+          serverIP: serverIP
+        });
+      }
+      win.show();
+    }
   }
 });
+
+
