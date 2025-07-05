@@ -11,10 +11,18 @@ const dgram = require('dgram');
 const client = dgram.createSocket('udp4');
 const localVersion = require('./package.json').version;
 
+const sudo = require('sudo-prompt');
+const hostsPath = process.platform === 'win32'
+  ? path.join(process.env.SystemRoot, 'System32', 'drivers', 'etc', 'hosts')
+  : '/etc/hosts';
+
+const options = {
+  name: 'BlueEye Monitor',
+};
+
 let tray = null;
 let win = null;
 let { serverIP, intervalMs, apiPort } = config;
-let remoteVersion = require('./package.json').version;
 
 function setTrayStatus(color = 'gray') {
   const iconPath = path.join(__dirname, 'assets', `icon-${color}.png`);
@@ -49,6 +57,35 @@ async function compressAndConvertToWebP(pngBuffer) {
     .resize(width, height)
     .webp({ quality: config.quality || 70 })
     .toBuffer();
+}
+
+async function blockSitesIfNotMatched() {
+  try {
+    const { data } = await axios.get(`http://${serverIP}:${apiPort}/client/blocklist`);
+
+    if (data.version && data.blocklist) {
+      const config = `### blueeye config ${data.version}`;
+      const content = fs.readFileSync(hostsPath, 'utf8');
+      if (!content.includes(config)) {
+        const blockList = data.blocklist.map(blockSite => `${blockSite.redirect} ${blockSite.url}`);
+        const joined = `${os.EOL}${os.EOL}${config}${os.EOL}${blockList.join(os.EOL)}${os.EOL}`;
+
+        const cmd = process.platform === 'win32'
+          ? `echo ${joined.replace(/\n/g, ' & echo ')} >> "${hostsPath}"`
+          : `echo "${joined}" | tee -a ${hostsPath}`;
+
+        sudo.exec(cmd, options, (error, stdout, stderr) => {
+          if (error) {
+            console.error('Failed to modify hosts file:', error);
+          } else {
+            console.log('Sites blocked successfully.');
+          }
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Cannot read or write hosts file:', err.message);
+  }
 }
 
 async function captureAndUpload() {
@@ -115,17 +152,25 @@ app.whenReady().then(() => {
   });
 
   win.loadFile('index.html');
-  // win.webContents.openDevTools();
+  // win.webContents.openDevTools({ mode: 'detach' });
 
   win.on('close', (event) => {
     event.preventDefault();
     win.hide();
   });
 
+  app.setLoginItemSettings({
+    openAtLogin: true,
+    path: app.getPath('exe'),
+    args: ['--hidden']
+  });
+
   const autoLauncher = new AutoLaunch({ name: 'BlueEye' });
   autoLauncher.isEnabled().then(enabled => {
     if (!enabled) autoLauncher.enable();
   });
+
+  blockSitesIfNotMatched();
 
   setInterval(captureAndUpload, intervalMs || 60000);
 });
@@ -136,7 +181,11 @@ client.on('message', (msg, rinfo) => {
   const response = msg.toString();
   if (response) {
     const jsonData = JSON.parse(response);
-    serverIP = jsonData.SERVER_IP_ADDRESS || config.serverIP;
+    const newServerIp = jsonData.SERVER_IP_ADDRESS || config.serverIP;
+    if (newServerIp !== serverIP) {
+      serverIP = newServerIp;
+      blockSitesIfNotMatched();
+    };
     intervalMs = jsonData.CLIENT_SCREENSHOT_INTERVAL || config.intervalMs;
     apiPort = jsonData.CLIENT_API_PORT || config.apiPort;
     const remoteVersion = jsonData.CLIENT_APP_VERSION || localVersion;
