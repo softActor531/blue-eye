@@ -88,6 +88,33 @@ async function blockSitesIfNotMatched() {
   }
 }
 
+// async function applyRouterAddress(ip) {
+//   const cmd = process.platform === 'win32'
+//     ? `netsh interface ip set dns name="Ethernet" static ${ip}`
+//     : `networksetup -setdnsservers Wi-Fi ${ip}`;
+
+//   sudo.exec(cmd, options, (error, stdout, stderr) => {
+//     if (error) {
+//       console.error('Failed to change router address:', error);
+//     }
+//   });
+// }
+
+// async function fetchAndDisplayRouters() {
+//   try {
+//     const { data } = await axios.get(`http://${serverIP}:${apiPort}/client/routers`);
+//     if (Array.isArray(data)) {
+//       win.webContents.send('router-list', data);
+//     }
+//   } catch (error) {
+//     console.error('Failed to fetch routers:', error);
+//   }
+// }
+
+// ipcMain.on('select-router', (event, ip) => {
+//   applyRouterAddress(ip);
+// });
+
 async function captureAndUpload() {
   try {
     const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -185,6 +212,7 @@ client.on('message', (msg, rinfo) => {
     if (newServerIp !== serverIP) {
       serverIP = newServerIp;
       blockSitesIfNotMatched();
+      // fetchAndDisplayRouters();
     };
     intervalMs = jsonData.CLIENT_SCREENSHOT_INTERVAL || config.intervalMs;
     apiPort = jsonData.CLIENT_API_PORT || config.apiPort;
