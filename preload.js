@@ -6,5 +6,7 @@ contextBridge.exposeInMainWorld('api', {
 });
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  onVersionMismatch: (callback) => ipcRenderer.on('version-mismatch', callback)
+  onVersionMismatch: (callback) => ipcRenderer.on('version-mismatch', callback),
+  onRouterList: (cb) => ipcRenderer.on('router-list', (_, data) => cb(data)),
+  selectRouter: (ip) => ipcRenderer.send('select-router', ip)
 });

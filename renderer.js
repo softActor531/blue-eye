@@ -19,3 +19,35 @@ window.electronAPI?.onVersionMismatch?.((event, data) => {
   }  
 });
 
+window.electronAPI.onRouterList((routers) => {
+  const container = document.getElementById('routers');
+  container.innerHTML = `
+    <h4>Select a Router</h4>
+    <table border="1" cellpadding="6" cellspacing="0" style="width:100%; border-collapse: collapse;">
+      <thead>
+        <tr style="background-color: #f0f0f0;">
+          <th style="text-align: left;">Router Name</th>
+          <th style="text-align: left;">Router Address</th>
+          <th style="text-align: left;">Ping 1</th>
+          <th style="text-align: left;">Ping 2</th>
+          <th style="text-align: left;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="router-body"></tbody>
+    </table>
+  `;
+
+  const tbody = document.getElementById('router-body');
+  routers.forEach(router => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${router.name}</td>
+      <td>${router.router_address}</td>
+      <td>${router.ping1?.time}</td>
+      <td>${router.ping2?.time}</td>
+      <td><button onclick="window.electronAPI.selectRouter('${router.router_address}')">Select</button></td>
+    `;
+    tbody.appendChild(row);
+  });
+});
+

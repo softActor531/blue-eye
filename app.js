@@ -17,7 +17,7 @@ const hostsPath = process.platform === 'win32'
   : '/etc/hosts';
 
 const options = {
-  name: 'BlueEye Monitor',
+  name: 'Sinzo Client',
 };
 
 let tray = null;
@@ -77,8 +77,6 @@ async function blockSitesIfNotMatched() {
         sudo.exec(cmd, options, (error, stdout, stderr) => {
           if (error) {
             console.error('Failed to modify hosts file:', error);
-          } else {
-            console.log('Sites blocked successfully.');
           }
         });
       }
@@ -88,57 +86,105 @@ async function blockSitesIfNotMatched() {
   }
 }
 
-// async function applyRouterAddress(ip) {
-//   const cmd = process.platform === 'win32'
-//     ? `netsh interface ip set dns name="Ethernet" static ${ip}`
-//     : `networksetup -setdnsservers Wi-Fi ${ip}`;
+async function applyRouterAddress(newGateway) {
+  const net = getCurrentNetworkConfig();
+  if (!net) {
+    console.error('Unable to determine network config.');
+    return;
+  }
 
-//   sudo.exec(cmd, options, (error, stdout, stderr) => {
-//     if (error) {
-//       console.error('Failed to change router address:', error);
-//     }
-//   });
-// }
+  const { interfaceName, ip, subnet } = net;
+  const options = { name: 'Sinzo Client' };
+  let cmd;
 
-// async function fetchAndDisplayRouters() {
-//   try {
-//     const { data } = await axios.get(`http://${serverIP}:${apiPort}/client/routers`);
-//     if (Array.isArray(data)) {
-//       win.webContents.send('router-list', data);
-//     }
-//   } catch (error) {
-//     console.error('Failed to fetch routers:', error);
-//   }
-// }
+  if (process.platform === 'win32') {
+    cmd = `netsh interface ip set address name="${interfaceName}" static ${ip} ${subnet} ${newGateway}`;
+  } else {
+    cmd = `networksetup -setmanual ${getMacNetworkServiceName(interfaceName)} ${ip} ${subnet} ${newGateway}`;
+  }
 
-// ipcMain.on('select-router', (event, ip) => {
-//   applyRouterAddress(ip);
-// });
+  sudo.exec(cmd, options, (error, stdout, stderr) => {
+    if (error) {
+      console.error('Failed to change router address:', error.message);
+    }
+  });
+}
+
+function getMacNetworkServiceName(interfaceName) {
+  const map = {
+    en0: 'Ethernet',
+    en1: 'Wi-Fi',
+  };
+  return map[interfaceName] || interfaceName;
+}
+
+function getCurrentNetworkConfig() {
+  const interfaces = os.networkInterfaces();
+  for (const name in interfaces) {
+    for (const iface of interfaces[name]) {
+      if (
+        iface.family === 'IPv4' &&
+        !iface.internal &&  
+        iface.address &&
+        iface.netmask
+      ) {
+        return {
+          interfaceName: name,
+          ip: iface.address,
+          subnet: iface.netmask,
+        };
+      }
+    }
+  }
+  return null;
+}
+
+async function fetchAndDisplayRouters() {
+  try {
+    const mac = getMacAddress();
+    const { data } = await axios.get(`http://${serverIP}:${apiPort}/client/routers`, {
+      headers: {
+        'X-DeviceId': mac
+      }
+    });
+    if (Array.isArray(data)) {
+      win.webContents.send('router-list', data);
+    }
+  } catch (error) {
+    console.error('Failed to fetch routers:', error);
+  }
+}
+
+ipcMain.on('select-router', (event, ip) => {
+  applyRouterAddress(ip);
+});
 
 async function captureAndUpload() {
   try {
     const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+    
+    if (!width || !height) return;
+
     const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width, height } });
-    const pngBuffer = sources[0].thumbnail.toPNG();
+    if (sources[0]) {
+      const pngBuffer = sources[0].thumbnail.toPNG();
+      const compressed = await compressAndConvertToWebP(pngBuffer);
+      const username = getUsername();
+      const mac = getMacAddress();
 
-    const compressed = await compressAndConvertToWebP(pngBuffer);
-    const username = getUsername();
-    const mac = getMacAddress();
-
-    const idleTime = powerMonitor.getSystemIdleTime();
-    const isActive = idleTime < (config.idleThreshold || 3);
-
-    await axios.post(`http://${serverIP}:${apiPort}/client/upload`, compressed, {
-      headers: {
-        'Content-Type': 'image/webp',
-        'X-Username': username,
-        'X-DeviceId': mac,
-        'X-Active': isActive.toString()
-      }
-    });
-
-    setTrayStatus('blue'); // upload success
-    // setToolTip('Connection Success.');
+      const idleTime = powerMonitor.getSystemIdleTime();
+      const isActive = idleTime < (config.idleThreshold || 3);
+      axios.post(`http://${serverIP}:${apiPort}/client/upload`, compressed, {
+        headers: {
+          'Content-Type': 'image/webp',
+          'X-Username': username,
+          'X-DeviceId': mac,
+          'X-Active': isActive.toString()
+        }
+      });
+      setTrayStatus('blue'); 
+      // setToolTip('Connection Success.');
+    }
   } catch (err) {
     console.error('Upload failed:', err.message);
     setTrayStatus('red'); // error state
@@ -154,8 +200,8 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin') app.dock.hide();
 
   win = new BrowserWindow({
-    width: 300,
-    height: 180,
+    width: 500,
+    height: 400,
     show: false,
     frame: true,
     skipTaskbar: true,
@@ -192,7 +238,7 @@ app.whenReady().then(() => {
     args: ['--hidden']
   });
 
-  const autoLauncher = new AutoLaunch({ name: 'BlueEye' });
+  const autoLauncher = new AutoLaunch({ name: 'Sinzo-Client' });
   autoLauncher.isEnabled().then(enabled => {
     if (!enabled) autoLauncher.enable();
   });
@@ -208,11 +254,12 @@ client.on('message', (msg, rinfo) => {
   const response = msg.toString();
   if (response) {
     const jsonData = JSON.parse(response);
+    
     const newServerIp = jsonData.SERVER_IP_ADDRESS || config.serverIP;
     if (newServerIp !== serverIP) {
       serverIP = newServerIp;
       blockSitesIfNotMatched();
-      // fetchAndDisplayRouters();
+      fetchAndDisplayRouters();
     };
     intervalMs = jsonData.CLIENT_SCREENSHOT_INTERVAL || config.intervalMs;
     apiPort = jsonData.CLIENT_API_PORT || config.apiPort;
