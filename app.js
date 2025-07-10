@@ -238,10 +238,12 @@ app.whenReady().then(() => {
     args: ['--hidden']
   });
 
-  const autoLauncher = new AutoLaunch({ name: 'Sinzo-Client' });
-  autoLauncher.isEnabled().then(enabled => {
-    if (!enabled) autoLauncher.enable();
-  });
+  if (process.platform !== 'win32') {
+    const autoLauncher = new AutoLaunch({ name: 'Sinzo-Client' });
+    autoLauncher.isEnabled().then(enabled => {
+      if (!enabled) autoLauncher.enable();
+    });
+  }
 
   blockSitesIfNotMatched();
 
