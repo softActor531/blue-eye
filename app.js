@@ -166,17 +166,25 @@ async function captureAndUpload() {
     if (!width || !height) return;
 
     const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width, height } });
-    if (sources[0]) {
-      const pngBuffer = sources[0].thumbnail.toPNG();
-      const compressed = await compressAndConvertToWebP(pngBuffer);
+    const imgData = {};
+    for (let i = 0; i < sources.length; i ++) {
+      if (sources[i]) {
+        const pngBuffer = sources[i].thumbnail.toPNG();
+        const compressed = await compressAndConvertToWebP(pngBuffer);
+        imgData[`screen${i}`] = compressed;
+      }
+    }
+    imgData.count = sources.length;
+    
+    if (imgData) {
       const username = getUsername();
       const mac = getMacAddress();
 
       const idleTime = powerMonitor.getSystemIdleTime();
       const isActive = idleTime < (config.idleThreshold || 3);
-      axios.post(`http://${serverIP}:${apiPort}/client/upload`, compressed, {
+      axios.post(`http://${serverIP}:${apiPort}/client/upload`, imgData, {
         headers: {
-          'Content-Type': 'image/webp',
+          'Content-Type': 'application/json',
           'X-Username': username,
           'X-DeviceId': mac,
           'X-Active': isActive.toString()
@@ -232,21 +240,20 @@ app.whenReady().then(() => {
     win.hide();
   });
 
+  let appPath;
+  if (process.platform === 'darwin') {
+    appPath = process.execPath;
+  } else {
+    appPath = app.getPath('exe');
+  }
+
   app.setLoginItemSettings({
     openAtLogin: true,
-    path: app.getPath('exe'),
+    path: appPath,
     args: ['--hidden']
   });
 
-  if (process.platform !== 'win32') {
-    const autoLauncher = new AutoLaunch({ name: 'Sinzo-Client' });
-    autoLauncher.isEnabled().then(enabled => {
-      if (!enabled) autoLauncher.enable();
-    });
-  }
-
   blockSitesIfNotMatched();
-
   setInterval(captureAndUpload, intervalMs || 60000);
 });
 
