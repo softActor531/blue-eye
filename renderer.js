@@ -51,3 +51,23 @@ window.electronAPI.onRouterList((routers) => {
   });
 });
 
+window.electronAPI?.getDeviceId?.().then((currentId) => {
+  const input = document.getElementById('deviceIdInput');
+  if (input && currentId) {
+    input.value = currentId;
+  }
+});
+
+document.getElementById('saveDeviceIdBtn')?.addEventListener('click', () => {
+  const input = document.getElementById('deviceIdInput');
+  const id = input?.value.trim();
+
+  if (id.length === 0) {
+    alert('Device ID cannot be empty');
+    return;
+  }
+
+  window.electronAPI?.setDeviceId?.(id);
+  alert('Device ID saved!');
+  window.electronAPI?.hideWindow?.();
+});

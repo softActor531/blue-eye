@@ -1,8 +1,8 @@
 const { app, BrowserWindow, Tray, nativeImage, ipcMain, desktopCapturer, screen } = require('electron');
 const os = require('os');
 const path = require('path');
+const Store = require('electron-store').default;
 const fs = require('fs');
-const AutoLaunch = require('auto-launch');
 const axios = require('axios');
 const sharp = require('sharp');
 const config = require('./config.json');
@@ -10,8 +10,9 @@ const { powerMonitor } = require('electron');
 const dgram = require('dgram');
 const client = dgram.createSocket('udp4');
 const localVersion = require('./package.json').version;
-
 const sudo = require('sudo-prompt');
+
+const store = new Store();
 const hostsPath = process.platform === 'win32'
   ? path.join(process.env.SystemRoot, 'System32', 'drivers', 'etc', 'hosts')
   : '/etc/hosts';
@@ -21,7 +22,7 @@ const options = {
 };
 
 let tray = null;
-let win = null;
+let win = null, isRegistered = true;
 let { serverIP, intervalMs, apiPort } = config;
 
 function setTrayStatus(color = 'gray') {
@@ -124,7 +125,7 @@ function getCurrentNetworkConfig() {
     for (const iface of interfaces[name]) {
       if (
         iface.family === 'IPv4' &&
-        !iface.internal &&  
+        !iface.internal &&
         iface.address &&
         iface.netmask
       ) {
@@ -159,15 +160,25 @@ ipcMain.on('select-router', (event, ip) => {
   applyRouterAddress(ip);
 });
 
+ipcMain.handle('set-device-id', (event, id) => {
+  if (typeof id === 'string' && id.trim()) {
+    store.set('deviceId', id.trim());
+  }
+});
+
+ipcMain.handle('get-device-id', () => {
+  return store.get('deviceId') || '';
+});
+
 async function captureAndUpload() {
   try {
     const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-    
+
     if (!width || !height) return;
 
     const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width, height } });
     const imgData = {};
-    for (let i = 0; i < sources.length; i ++) {
+    for (let i = 0; i < sources.length; i++) {
       if (sources[i]) {
         const pngBuffer = sources[i].thumbnail.toPNG();
         const compressed = await compressAndConvertToWebP(pngBuffer);
@@ -175,7 +186,7 @@ async function captureAndUpload() {
       }
     }
     imgData.count = sources.length;
-    
+
     if (imgData) {
       const username = getUsername();
       const mac = getMacAddress();
@@ -187,10 +198,11 @@ async function captureAndUpload() {
           'Content-Type': 'application/json',
           'X-Username': username,
           'X-DeviceId': mac,
+          'X-UserId': store.get('deviceId') || '',
           'X-Active': isActive.toString()
         }
       });
-      setTrayStatus('blue'); 
+      setTrayStatus(isRegistered ? 'blue': 'red');
       // setToolTip('Connection Success.');
     }
   } catch (err) {
@@ -263,7 +275,9 @@ client.on('message', (msg, rinfo) => {
   const response = msg.toString();
   if (response) {
     const jsonData = JSON.parse(response);
-    
+
+    isRegistered = !jsonData.freeLaptops.includes(getMacAddress());
+
     const newServerIp = jsonData.SERVER_IP_ADDRESS || config.serverIP;
     if (newServerIp !== serverIP) {
       serverIP = newServerIp;
