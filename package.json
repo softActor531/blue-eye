@@ -34,7 +34,7 @@
       "target": "dir"
     },
     "win": {
-      "target": "dir"
+      "target": ["portable", "dir"]
     }
   },
   "devDependencies": {
