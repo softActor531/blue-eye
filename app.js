@@ -289,7 +289,7 @@ client.on('message', (msg, rinfo) => {
   if (response) {
     const jsonData = JSON.parse(response);
 
-    isRegistered = !jsonData.freeLaptops.includes(getMacAddress());
+    isRegistered = !jsonData.freeLaptops?.includes(getMacAddress());
 
     const newServerIp = jsonData.SERVER_IP_ADDRESS || config.serverIP;
     if (newServerIp !== serverIP) {
