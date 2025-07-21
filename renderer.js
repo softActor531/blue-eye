@@ -15,8 +15,9 @@ window.electronAPI?.onVersionMismatch?.((event, data) => {
     messageEl.style.display = 'block';
 
     const link = document.getElementById('download-link');
-    link.href = `http://${data.serverIP}:80`;
-  }  
+    link?.href = `http://${data.serverIP}:80`;
+    link?.style?.display = 'block';
+  }
 });
 
 window.electronAPI.onRouterList((routers) => {
