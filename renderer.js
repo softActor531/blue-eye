@@ -12,11 +12,12 @@ window.electronAPI?.onVersionMismatch?.((event, data) => {
   const messageEl = document.getElementById('version-warning');
   if (messageEl) {
     messageEl.innerText = `New version available.\nCurrent: ${data.local}, Latest: ${data.remote}`;
-    messageEl.style.display = 'block';
-
-    const link = document.getElementById('download-link');
-    link?.href = `http://${data.serverIP}:80`;
-    link?.style?.display = 'block';
+    messageEl.style.display = 'block';  
+  }
+  const link = document.getElementById('download-link');
+  if (link) {
+    link.href = `http://${data.serverIP}:80`;
+    link.style.display = 'block';
   }
 });
 
