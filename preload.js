@@ -8,5 +8,7 @@ contextBridge.exposeInMainWorld('api', {
 contextBridge.exposeInMainWorld('electronAPI', {
   onVersionMismatch: (callback) => ipcRenderer.on('version-mismatch', callback),
   onRouterList: (cb) => ipcRenderer.on('router-list', (_, data) => cb(data)),
-  selectRouter: (ip) => ipcRenderer.send('select-router', ip)
+  selectRouter: (ip) => ipcRenderer.send('select-router', ip),
+  getDeviceId: () => ipcRenderer.invoke('get-device-id'),
+  setDeviceId: (id) => ipcRenderer.invoke('set-device-id', id),
 });

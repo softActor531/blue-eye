@@ -4,14 +4,16 @@
   <title>Sinzo Client</title>
 </head>
 <body>
+  <div style="margin-bottom: 2em;">
+    <input type="text" id="deviceIdInput" placeholder="Enter Device ID" />
+    <button id="saveDeviceIdBtn">Save Device ID</button>
+    <span id="savedMsg" style="display:none; color:green; margin-left:10px;">Saved!</span>
+  </div>
   <div id="routers" style="margin-bottom: 2em;"></div>
   <div id="version-warning" style="display: none; color: #000; padding: 10px; margin: 10px; border-radius: 5px;">
     A new version is available. 
   </div>
-  <a id="download-link" href="#" target="_blank">Click here to download</a>
-  <!-- <h3>Enter Your Local Server IP:</h3>
-  <input type="text" id="ipInput" placeholder="172.20.101.160" />
-  <button id="saveBtn">Confirm</button> -->
+  <a id="download-link" style="display: none;" href="#" target="_blank">Click here to download</a>
   <script src="renderer.js"></script>
 </body>
 </html>

@@ -12,11 +12,13 @@ window.electronAPI?.onVersionMismatch?.((event, data) => {
   const messageEl = document.getElementById('version-warning');
   if (messageEl) {
     messageEl.innerText = `New version available.\nCurrent: ${data.local}, Latest: ${data.remote}`;
-    messageEl.style.display = 'block';
-
-    const link = document.getElementById('download-link');
+    messageEl.style.display = 'block';  
+  }
+  const link = document.getElementById('download-link');
+  if (link) {
     link.href = `http://${data.serverIP}:80`;
-  }  
+    link.style.display = 'block';
+  }
 });
 
 window.electronAPI.onRouterList((routers) => {
@@ -51,3 +53,23 @@ window.electronAPI.onRouterList((routers) => {
   });
 });
 
+window.electronAPI?.getDeviceId?.().then((currentId) => {
+  const input = document.getElementById('deviceIdInput');
+  if (input && currentId) {
+    input.value = currentId;
+  }
+});
+
+document.getElementById('saveDeviceIdBtn')?.addEventListener('click', () => {
+  const input = document.getElementById('deviceIdInput');
+  const id = input?.value.trim();
+
+  if (id.length === 0) {
+    alert('Device ID cannot be empty');
+    return;
+  }
+
+  window.electronAPI?.setDeviceId?.(id);
+  alert('Device ID saved!');
+  window.electronAPI?.hideWindow?.();
+});
