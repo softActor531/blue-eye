@@ -45,13 +45,27 @@ function getMacAddress() {
 
 function getLocalIP() {
   const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name]) {
+
+  for (const [name, ifaceList] of Object.entries(interfaces)) {
+    const lowerName = name.toLowerCase();
+
+    if (!(lowerName.includes('ethernet') || lowerName === 'en0')) continue;
+
+    for (const iface of ifaceList) {
       if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address; // Return the first non-internal IPv4
+        return iface.address;
       }
     }
   }
+
+  for (const ifaceList of Object.values(interfaces)) {
+    for (const iface of ifaceList) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+
   return '127.0.0.1';
 }
 

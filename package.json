@@ -5,7 +5,8 @@
   "description": "",
   "main": "app.js",
   "scripts": {
-    "start": "NODE_NO_WARNINGS=1 electron .",
+    "postinstall": "electron-builder install-app-deps",
+    "start": "cross-env NODE_NO_WARNINGS=1 electron .",
     "build": "electron-builder",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win"
@@ -34,11 +35,15 @@
       "target": "dir"
     },
     "win": {
-      "target": ["portable", "dir"]
+      "target": [
+        "portable",
+        "dir"
+      ]
     }
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.1",
+    "cross-env": "^7.0.3",
     "electron": "^36.5.0",
     "electron-builder": "^26.0.12"
   }
