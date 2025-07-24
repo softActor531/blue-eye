@@ -45,15 +45,31 @@ function getMacAddress() {
 
 function getLocalIP() {
   const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    if (!name.toLowerCase().includes('ethernet')) continue;
 
-    for (const iface of interfaces[name]) {
+  for (const [name, ifaceList] of Object.entries(interfaces)) {
+    const lowerName = name.toLowerCase();
+
+    // Only proceed if interface looks like Ethernet or en0 (wired connection)
+    if (!(lowerName.includes('ethernet') || lowerName === 'en0')) continue;
+
+    for (const iface of ifaceList) {
       if (iface.family === 'IPv4' && !iface.internal) {
+        console.log("Local IP found:", iface.address, "on", name);
         return iface.address;
       }
     }
   }
+
+  // Fallback: return first non-internal IPv4 if no Ethernet found
+  for (const ifaceList of Object.values(interfaces)) {
+    for (const iface of ifaceList) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        console.log("Fallback IP:", iface.address);
+        return iface.address;
+      }
+    }
+  }
+
   return '127.0.0.1';
 }
 
