@@ -5,6 +5,7 @@
   "description": "",
   "main": "app.js",
   "scripts": {
+    "postinstall": "electron-builder install-app-deps",
     "start": "cross-env NODE_NO_WARNINGS=1 electron .",
     "build": "electron-builder",
     "build:mac": "electron-builder --mac",

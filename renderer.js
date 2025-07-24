@@ -45,8 +45,8 @@ window.electronAPI.onRouterList((routers) => {
     row.innerHTML = `
       <td>${router.name}</td>
       <td>${router.router_address}</td>
-      <td>${router.ping1?.time}</td>
-      <td>${router.ping2?.time}</td>
+      <td>${router.ping1?.time || ''}</td>
+      <td>${router.ping2?.time || ''}</td>
       <td><button onclick="window.electronAPI.selectRouter('${router.router_address}')">Select</button></td>
     `;
     tbody.appendChild(row);
