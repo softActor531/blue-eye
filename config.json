@@ -1,8 +1,9 @@
 {
-  "intervalMs": 2000,
+  "intervalMs": 5000,
   "serverIP": "172.20.101.1",
   "quality": 70,
   "idleThreshold": 2,
-  "port": 8924,
-  "apiPort": 8923
+  "port": 8925,
+  "apiPort": 8923,
+  "callSocketPort": 8920
 }

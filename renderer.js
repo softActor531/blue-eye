@@ -73,3 +73,22 @@ document.getElementById('saveDeviceIdBtn')?.addEventListener('click', () => {
   alert('Device ID saved!');
   window.electronAPI?.hideWindow?.();
 });
+
+const btn = document.getElementById('recordButton');
+let recording = false;
+
+btn.addEventListener('click', async () => {
+  const result = await window.electronAPI.toggleRecording();
+
+  if (result.status === 'started') {
+    btn.textContent = 'End a call';
+    recording = true;
+    new Notification('Recording started', { body: 'You are now recording.' });
+  } else if (result.status === 'stopped') {
+    btn.textContent = 'Start a call';
+    recording = false;
+    new Notification('Recording stopped', { body: 'Recording has stopped.' });
+  } else if (result.status === 'denied') {
+    alert('You are not approved to have a call.');
+  }
+});
