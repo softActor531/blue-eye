@@ -5,7 +5,7 @@ const fs = require('fs');
 const axios = require('axios');
 const FormData = require('form-data');
 let currentRecordingPath = '';
-let recordingStartTime = null;
+let recordingStartTime = null, serverUrl = '', macAddress = '';
 
 
 function getFFmpegPath() {
@@ -151,22 +151,24 @@ function startRecording() {
     // console.log(`[FFmpeg]: ${data.toString()}`);
   });
 
-  ffmpegProcess.on('exit', (code) => {
+  ffmpegProcess.on('exit', async (code) => {
     console.log(`[FFmpeg exited]: ${code}`);
-  });
-
-  console.log(`🎙️ Recording started → ${output}`);
-}
-
-async function stopRecording(serverUrl, macAddress) {
-  if (ffmpegProcess) {
-    ffmpegProcess.kill('SIGINT');
-    ffmpegProcess = null;
     const durationSeconds = ((Date.now() - recordingStartTime) / 1000).toFixed(2);
     recordingStartTime = null;
     if (serverUrl) {
       await uploadRecording(serverUrl, durationSeconds, macAddress);
     }
+  });
+
+  console.log(`🎙️ Recording started → ${output}`);
+}
+
+async function stopRecording(apiUrl, mac) {
+  if (ffmpegProcess) {
+    serverUrl = apiUrl;
+    macAddress = mac;
+    ffmpegProcess.kill('SIGINT');
+    ffmpegProcess = null;
   }
 }
 
@@ -177,7 +179,9 @@ async function uploadRecording(serverUrl, durationSeconds, macAddress) {
   }
 
   try {
-    const fileData = fs.readFileSync(currentRecordingPath);
+    const fileData = fs.createReadStream(currentRecordingPath);
+    const { size } = fs.statSync(currentRecordingPath);
+
     const form = new FormData();
     form.append('file', fileData, {
       filename: path.basename(currentRecordingPath),
