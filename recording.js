@@ -9,6 +9,7 @@ let currentRecordingPath = '';
 let recordingStartTime = null, micProcess, systemProcess;
 const micOutput = path.join(__dirname, 'mic.wav');
 const systemOutput = path.join(__dirname, 'system.wav');
+let serverUrl = '', macAddress = '';
 
 
 function getFFmpegPath() {
@@ -219,22 +220,59 @@ async function startRecording() {
       // console.log(`[FFmpeg]: ${data.toString()}`);
     });
 
-    ffmpegProcess.on('exit', (code) => {
+    ffmpegProcess.on('exit', async (code) => {
       console.log(`[FFmpeg exited]: ${code}`);
+      const durationSeconds = ((Date.now() - recordingStartTime) / 1000).toFixed(2);
+      recordingStartTime = null;
+      if (serverUrl) {
+        await uploadRecording(serverUrl, durationSeconds, macAddress);
+      }
     });
     console.log(`🎙️ Recording started → ${output}`);
   }
 }
 
-async function stopRecording(serverUrl, macAddress) {
-  if (ffmpegProcess) {
-    ffmpegProcess.kill('SIGINT');
-    ffmpegProcess = null;
+async function stopRecording(apiUrl, mac) {
+  if (os.platform() === 'win32') {
+    if (micProcess) micProcess.kill('SIGINT');
+    if (systemProcess) systemProcess.kill('SIGINT');
     const durationSeconds = ((Date.now() - recordingStartTime) / 1000).toFixed(2);
     recordingStartTime = null;
-    if (serverUrl) {
-      await uploadRecording(serverUrl, durationSeconds, macAddress);
+
+    console.log('Recording stopped. Merging...');
+
+    const ffmpeg = getFFmpegPath();
+
+    const merge = spawnSync(ffmpeg, [
+      '-i', micOutput,
+      '-i', systemOutput,
+      '-filter_complex', 'amix=inputs=2:duration=longest',
+      '-y', getOutputPath()
+    ]);
+
+    if (merge.stderr.length) {
+      console.log(merge.stderr.toString());
     }
+
+    console.log('✅ Merged output saved at:', getOutputPath());
+
+    setTimeout(async () => {
+      await uploadRecording(apiUrl, durationSeconds, mac);
+    }, 1000);
+
+    // Optional: clean up
+    try {
+      fs.unlinkSync(micOutput);
+      fs.unlinkSync(systemOutput);
+    } catch (e) {
+      console.warn('⚠️ Cleanup failed:', e.message);
+    }
+  }
+  if (ffmpegProcess) {
+    serverUrl = apiUrl;
+    macAddress = mac;
+    ffmpegProcess.kill('SIGINT');
+    ffmpegProcess = null;
   }
 }
 
@@ -245,7 +283,9 @@ async function uploadRecording(serverUrl, durationSeconds, macAddress) {
   }
 
   try {
-    const fileData = fs.readFileSync(currentRecordingPath);
+    const fileData = fs.createReadStream(currentRecordingPath);
+    const { size } = fs.statSync(currentRecordingPath);
+
     const form = new FormData();
     form.append('file', fileData, {
       filename: path.basename(currentRecordingPath),

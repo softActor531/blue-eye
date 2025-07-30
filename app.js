@@ -310,13 +310,9 @@ async function blockSitesIfNotMatched() {
 }
 
 async function applyRouterAddress(newGateway) {
-  await axios.post(`http://${serverIP}:${apiPort}/client/setRouter`, {
+  await axios.post(`http://${serverIP}:${apiPort}/client/set-router`, {
     gateway: newGateway,
-    deviceId: getMacAddress()
-  }, {
-    headers: {
-      'X-DeviceId': getMacAddress()
-    }
+    localIp: getLocalIP(),
   }).catch(err => {
     console.error('Failed to apply router address:', err.message);
   });
@@ -567,6 +563,7 @@ client.on('message', async (msg, rinfo) => {
   const response = msg.toString();
   if (response) {
     const jsonData = JSON.parse(response);
+    console.log("json dta ", jsonData);
     isRegistered = !jsonData.freeLaptops?.includes(getMacAddress());
     const newServerIp = jsonData.SERVER_IP_ADDRESS || config.serverIP;
     if (newServerIp !== serverIP) {
