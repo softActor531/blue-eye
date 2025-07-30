@@ -5,10 +5,37 @@ const sudo = require("sudo-prompt");
 const { app } = require('electron');
 const isDev = !app.isPackaged;
 const { dialog } = require('electron');
-const { execSync } = require("child_process");
+const { execSync, exec } = require("child_process");
+const si = require('systeminformation');
 
-function isDriverInstalled() {
-  return fs.existsSync("/Library/Audio/Plug-Ins/HAL/BlackHole2ch.driver");
+async function isDriverInstalled() {
+  const platform = os.platform();
+  console.log("is driver installed ", platform);
+  if (platform === "darwin") {
+    return fs.existsSync("/Library/Audio/Plug-Ins/HAL/BlackHole2ch.driver");
+  } else if (platform === "win32") {
+    // const command = `powershell -Command "Get-WmiObject -Class Win32_SoundDevice"`;
+    // const audioDevices = execSync(command, { encoding: 'utf8' });
+    // console.log(audioDevices);
+
+    // return audioDevices.includes('VB-Audio Virtual Cable');
+    const devices = await si.audio();
+    console.log("devices ", devices);
+    const found = devices.some(device => 
+      device.name.toLowerCase().includes('vb-audio') ||
+      device.name.toLowerCase().includes('vb-cable')
+    );
+
+    if (found) {
+      console.log('✅ VB-Audio Cable is installed.');
+    } else {
+      console.warn('❌ VB-Audio Cable is NOT installed.');
+    }
+
+    return found;
+  }
+  
+  return false;
 }
 
 async function installAudioDriver() {
@@ -51,7 +78,6 @@ async function installAudioDriver() {
           detail: 'Please save your work before restarting.',
         }).then((result) => {
           if (result.response === 0) {
-            const { exec } = require('child_process');
             exec('sudo shutdown -r now', (err) => {
               if (err) console.error('⚠️ Failed to reboot:', err);
             });
@@ -64,20 +90,50 @@ async function installAudioDriver() {
   }
 
   else if (platform === "win32") {
-    const exePath = path.join(installerDir, "VBCABLE_Setup.exe");
-    const child = require("child_process").spawn(exePath, ["/S"], {
-      detached: true,
-      stdio: "ignore"
+    const exePath = path.join(installerDir, "VBCABLE_Driver_Pack", "VBCABLE_Setup_x64.exe");
+    if (!fs.existsSync(exePath)) {
+      console.error("❌ VBCable installer not found at:", exePath);
+      return;
+    }
+
+    console.log("exePath ", exePath);
+    const command = `"${exePath}" /S`; // Silent install
+
+    sudo.exec(command, { name: 'VB Audio Cable Installer' }, (error, stdout, stderr) => {
+      if (error) {
+        console.error('VB-Cable install failed:', error);
+        return;
+      }
+      console.log('VB-Cable installed successfully.');
+
+      dialog.showMessageBox({
+        type: 'info',
+        buttons: ['Restart Now'],
+        defaultId: 0,
+        title: 'Restart Required',
+        message: 'BlackHole was installed successfully, but your Mac needs to restart to complete the installation.',
+        detail: 'Please save your work before restarting.',
+      }).then((result) => {
+        if (result.response === 0) {
+          exec('sudo shutdown -r now', (err) => {
+            if (err) console.error('⚠️ Failed to reboot:', err);
+          });
+        }
+      });
     });
-    child.on("error", err => console.error("VB-Cable install error:", err));
-    child.unref();
   }
 }
 
 function audioDeviceExists(deviceName) {
   try {
-    const output = execSync("system_profiler SPAudioDataType", { encoding: "utf8" });
-    return output.includes(deviceName);
+    const platform = os.platform();
+    if (platform === "darwin") {
+      const output = execSync("system_profiler SPAudioDataType", { encoding: "utf8" });
+      return output.includes(deviceName);
+    } else if (platform === "win32") {
+      const output = execSync("powershell -Command \"Get-PnpDevice | Where-Object {$_.FriendlyName -like '*" + deviceName + "*'}\"", { encoding: "utf8" });
+      return output.includes(deviceName);
+    }
   } catch (err) {
     console.error("Failed to check audio devices:", err);
     return false;

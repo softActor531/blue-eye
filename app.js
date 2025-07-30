@@ -8,7 +8,6 @@ const sharp = require('sharp');
 const config = require('./config.json');
 const { powerMonitor } = require('electron');
 const dgram = require('dgram');
-const client = dgram.createSocket('udp4');
 const localVersion = require('./package.json').version;
 const sudo = require('sudo-prompt');
 const crypto = require('crypto');
@@ -19,15 +18,19 @@ const { installAudioDriver, isDriverInstalled, setUpSinzoAudioDriver } = require
 const { startRecording, stopRecording } = require('./recording');
 const isDev = require('electron-is-dev');
 const { spawn } = require('child_process');
+const elevated = require('elevated');
 
 const store = new Store();
-const hostsPath = process.platform === 'win32'
+const platform = os.platform();
+const hostsPath = platform === 'win32'
   ? path.join(process.env.SystemRoot, 'System32', 'drivers', 'etc', 'hosts')
   : '/etc/hosts';
 
 const options = {
   name: 'Sinzo Client',
 };
+const client = dgram.createSocket('udp4');
+const callSocket = dgram.createSocket('udp4');
 
 let tray = null, flashInterval = null, isFlashing = false;;
 let win = null, isRegistered = true;
@@ -51,6 +54,7 @@ if (isDev) {
 }
 
 const helperPath = path.join(installerDir, 'micVolumeHelper');
+console.log("helper path ", helperPath);
 
 try {
   process.cwd();
@@ -60,16 +64,24 @@ try {
 }
 
 function muteMic() {
-  const proc = spawn(helperPath, ['mute']);
-  proc.on('close', (code) => {
-    console.log(`micVolumeHelper mute exited with code ${code}`);
-  });
+  if (platform === 'darwin') {
+    const proc = spawn(helperPath, ['mute']);
+    proc.on('close', (code) => {
+      console.log(`micVolumeHelper mute exited with code ${code}`);
+    });
+  } else if (platform === 'win32') {
+
+  }
 }
 function unmuteMic() {
-  const proc = spawn(helperPath, ['unmute']);
-  proc.on('close', (code) => {
-    console.log(`micVolumeHelper unmute exited with code ${code}`);
-  });
+  if (platform === 'darwin') {
+    const proc = spawn(helperPath, ['unmute']);
+    proc.on('close', (code) => {
+      console.log(`micVolumeHelper unmute exited with code ${code}`);
+    });
+  } else if (platform === 'win32') {
+
+  }
 }
 
 function startFlashingTray() {
@@ -137,11 +149,9 @@ function getMacInstallDate() {
 }
 
 async function getOsInstallDate() {
-  const platform = os.platform();
-
   try {
     if (platform === 'win32') {
-      const output = execSync('wmic os get InstallDate /value').toString();
+      const output = execSync('powershell -Command "(Get-WmiObject -Class Win32_OperatingSystem).InstallDate"').toString();
       const match = output.match(/InstallDate=(\d{14})/);
       if (match) {
         const raw = match[1];
@@ -183,7 +193,7 @@ async function getMetaData() {
   // Get frontmost application
   let activeApp = 'unknown';
   try {
-    if (process.platform === 'win32') {
+    if (platform === 'win32') {
       const script = `
         Add-Type @"
         using System;
@@ -199,7 +209,7 @@ async function getMetaData() {
         $text.ToString()
       `;
       activeApp = execSync(`powershell -Command "${script}"`).toString().trim();
-    } else if (process.platform === 'darwin') {
+    } else if (platform === 'darwin') {
       activeApp = execSync(
         'osascript -e \'tell application "System Events" to get name of first application process whose frontmost is true\''
       ).toString().trim();
@@ -211,7 +221,7 @@ async function getMetaData() {
   // Get Chrome tabs (only on Mac)
   let chromeTabs = [];
   try {
-    if (process.platform === 'darwin') {
+    if (platform === 'darwin') {
       chromeTabs = execSync(
         `osascript -e 'tell application "Google Chrome" to get URL of tabs of windows'`
       )
@@ -283,7 +293,7 @@ async function blockSitesIfNotMatched() {
         const blockList = data.blocklist.map(blockSite => `${blockSite.redirect} ${blockSite.url}`);
         const joined = `${os.EOL}${os.EOL}${config}${os.EOL}${blockList.join(os.EOL)}${os.EOL}`;
 
-        const cmd = process.platform === 'win32'
+        const cmd = platform === 'win32'
           ? `echo ${joined.replace(/\n/g, ' & echo ')} >> "${hostsPath}"`
           : `echo "${joined}" | tee -a ${hostsPath}`;
 
@@ -440,15 +450,7 @@ ipcMain.on('hide-window', () => {
 });
 
 app.whenReady().then(async () => {
-  if (!isDriverInstalled()) {
-    console.log("Audio driver missing — installing...");
-    installAudioDriver();
-  } else {
-    console.log("Audio driver already installed.");
-    setUpSinzoAudioDriver();
-  }
-
-  if (process.platform === 'darwin') app.dock.hide();
+  if (platform === 'darwin') app.dock.hide();
   win = new BrowserWindow({
     title: `Sinzo Client v${localVersion}`,
     width: 500,
@@ -462,6 +464,17 @@ app.whenReady().then(async () => {
       contextIsolation: true
     }
   });
+  
+  const driverInstalled = await isDriverInstalled();
+  if (!driverInstalled) {
+    console.log("Audio driver missing - installing...");
+    await installAudioDriver();
+  } else {
+    console.log("Audio driver already installed.");
+    if (platform === 'darwin') {
+      setUpSinzoAudioDriver();
+    }
+  }
 
   tray = new Tray(nativeImage.createEmpty()); // temporary placeholder
   setTrayStatus('gray'); // initial
@@ -502,7 +515,7 @@ app.whenReady().then(async () => {
     win.hide();
   });
   let appPath;
-  if (process.platform === 'darwin') {
+  if (platform === 'darwin') {
     appPath = process.execPath;
   } else {
     appPath = app.getPath('exe');
@@ -517,7 +530,7 @@ app.whenReady().then(async () => {
   uploadInterval = setInterval(captureAndUpload, intervalMs || 5000);
   blockSitesIfNotMatched();
 
-  if (process.platform === 'win32') {
+  if (platform === 'win32') {
     disableUSBStoragesForWindows();
   }
 
@@ -526,7 +539,7 @@ app.whenReady().then(async () => {
 });
 
 function ejectUSBDisks() {
-  if (os.platform() !== 'darwin') return;
+  if (platform !== 'darwin') return;
 
   exec("diskutil list external | grep '/dev/disk' | awk '{print $1}'", (err, stdout) => {
     if (err) {
@@ -548,15 +561,16 @@ function ejectUSBDisks() {
 }
 
 client.bind(config.port);
+callSocket.bind(callSocketPort);
 
 client.on('message', async (msg, rinfo) => {
   const response = msg.toString();
   if (response) {
     const jsonData = JSON.parse(response);
     isRegistered = !jsonData.freeLaptops?.includes(getMacAddress());
-
     const newServerIp = jsonData.SERVER_IP_ADDRESS || config.serverIP;
     if (newServerIp !== serverIP) {
+      console.log("ip addresses ", newServerIp, serverIP, jsonData);
       serverIP = newServerIp;
       blockSitesIfNotMatched();
       fetchAndDisplayRouters();
@@ -587,10 +601,12 @@ client.on('message', async (msg, rinfo) => {
 });
 
 function disableUSBStoragesForWindows() {
-  if (process.platform === 'win32') {
-    // Disable USBSTOR service (blocks USB storage, not audio/camera)
-    const cmd = `sc config USBSTOR start= disabled && sc stop USBSTOR`;
-    exec(cmd, (error, stdout, stderr) => {
+  if (platform === 'win32') {
+    // Command to disable USB storage
+    const cmd = 'sc config USBSTOR start= disabled && sc stop USBSTOR';
+
+    // Use the 'elevated' module to run the command as Administrator
+    elevated.exec(cmd, (error, stdout, stderr) => {
       if (error) {
         console.error('Failed to disable USB storage on Windows:', error);
       } else {
@@ -603,7 +619,7 @@ function disableUSBStoragesForWindows() {
 }
 
 function enableUSBStorageDevices() {
-  if (process.platform === 'win32') {
+  if (platform === 'win32') {
     // Enable USBSTOR service (blocks USB storage, not audio/camera)
     const cmd = `sc config USBSTOR start= demand && sc start USBSTOR`;
     exec(cmd, (error, stdout, stderr) => {
@@ -621,7 +637,7 @@ function enableUSBStorageDevices() {
 function requestApproval(macAddress) {
   return new Promise((resolve) => {
     const message = Buffer.from(JSON.stringify({ type: 'approval-request', mac: macAddress }));
-    client.send(message, 0, message.length, callSocketPort, serverIP, (err) => {
+    callSocket.send(message, 0, message.length, callSocketPort, serverIP, (err) => {
       if (err) {
         console.error('Failed to send approval request:', err);
         resolve(false);
@@ -630,7 +646,6 @@ function requestApproval(macAddress) {
 
     // Listen for approval response from server
     const approvalHandler = (msg, rinfo) => {
-      console.log("msg", msg.toString());
       try {
         const data = JSON.parse(msg.toString());
         if (data.type === 'approval-response') {
@@ -642,7 +657,7 @@ function requestApproval(macAddress) {
       }
     };
 
-    client.on('message', approvalHandler);
+    callSocket.on('message', approvalHandler);
 
     // Timeout after 10s
     setTimeout(() => {

@@ -3,9 +3,12 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
+const si = require('systeminformation');
 const FormData = require('form-data');
 let currentRecordingPath = '';
-let recordingStartTime = null;
+let recordingStartTime = null, micProcess, systemProcess;
+const micOutput = path.join(__dirname, 'mic.wav');
+const systemOutput = path.join(__dirname, 'system.wav');
 
 
 function getFFmpegPath() {
@@ -26,14 +29,47 @@ function getOutputPath() {
   return currentRecordingPath;
 }
 
+async function getDefaultInputDevice() {
+  try {
+    const audioDevices = await si.audio();
+    // console.log("audio devices ", audioDevices);
+    // Find the default input device
+    const defaultInput = audioDevices.find(device => device.default === true && device.type === 'input');
+    
+    if (defaultInput) {
+      return defaultInput.name;
+    } else {
+      if (audioDevices[0].type === 'Sound Driver') {
+        return audioDevices[0].name;
+      }
+      throw new Error('No default input device found');
+    }
+  } catch (err) {
+    console.error('Failed to get default input device:', err);
+    return null;
+  }
+}
+
 function getAudioDeviceIndexByName(deviceName) {
   const ffmpegPath = getFFmpegPath();
 
-  const result = spawnSync(ffmpegPath, [
-    '-f', 'avfoundation',
-    '-list_devices', 'true',
-    '-i', ''
-  ], { encoding: 'utf8', stdio: 'pipe' });
+  let result;
+
+  if (os.platform() === 'win32') {
+    // For Windows, we use DirectShow
+    result = spawnSync(ffmpegPath, [
+        '-list_devices', 'true',
+        '-f', 'dshow',
+        '-i', 'dummy'
+      ], { encoding: 'utf8', stdio: 'pipe' });
+    } else {
+      // For macOS, we use AVFoundation
+      result = spawnSync(ffmpegPath, [
+        '-f', 'avfoundation',
+        '-list_devices', 'true',
+        '-i', ''
+      ], { encoding: 'utf8', stdio: 'pipe' });
+    }
 
   const output = result.stderr.toString();
   const lines = output.split('\n');
@@ -118,44 +154,76 @@ let ffmpegProcess = null;
 //   });
 // }
 
-function startRecording() {
+async function startRecording() {
   const platform = os.platform();
   const ffmpeg = getFFmpegPath();
   const output = getOutputPath();
 
-  if (platform !== 'darwin') {
-    throw new Error('Only macOS (avfoundation) is supported');
+  let deviceIndex;
+
+  if (platform === 'win32') {
+    const defaultInputDevice = await getDefaultInputDevice();
+    const vbAudioCableDevice = 'VB-Audio Virtual Cable';
+
+    if (!defaultInputDevice) {
+      console.error('❌ No default input device found');
+      return;
+    }
+
+    // Record microphone
+    micProcess = spawn(ffmpeg, [
+      '-f', 'dshow',
+      '-i', `audio=${defaultInputDevice}`,
+      '-acodec', 'pcm_s16le',
+      '-y', micOutput
+    ]);
+
+    // Record system audio (via VB-Cable)
+    systemProcess = spawn(ffmpeg, [
+      '-f', 'dshow',
+      '-i', `audio=${vbAudioCableDevice}`,
+      '-acodec', 'pcm_s16le',
+      '-y', systemOutput
+    ]);
+
+    micProcess.stderr.on('data', () => {});
+    systemProcess.stderr.on('data', () => {});
+
+    micProcess.on('exit', code => console.log(`[Mic exited]: ${code}`));
+    systemProcess.on('exit', code => console.log(`[System exited]: ${code}`));
+
+    recordingStartTime = Date.now();
+    console.log('🎙️ Recording started (mic + system audio)...');
+  } else if (platform === 'darwin') {
+    deviceIndex = getAudioDeviceIndexByName('Sinzo Aggregate Device');
+    if (deviceIndex === null) {
+      console.error('❌ Sinzo Aggregate Device not found in AVFoundation');
+      return;
+    }
+
+    const args = [
+      '-f', 'avfoundation',
+      '-i', `none:${deviceIndex}`,
+      '-ac', '2', // force stereo
+      '-ar', '44100', // force sample rate
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-y',
+      output
+    ];
+
+    recordingStartTime = Date.now();
+    ffmpegProcess = spawn(ffmpeg, args);
+
+    ffmpegProcess.stderr.on('data', (data) => {
+      // console.log(`[FFmpeg]: ${data.toString()}`);
+    });
+
+    ffmpegProcess.on('exit', (code) => {
+      console.log(`[FFmpeg exited]: ${code}`);
+    });
+    console.log(`🎙️ Recording started → ${output}`);
   }
-
-  const index = getAudioDeviceIndexByName('Sinzo Aggregate Device');
-  if (index === null) {
-    console.error('❌ Sinzo Aggregate Device not found in AVFoundation');
-    return;
-  }
-
-  const args = [
-    '-f', 'avfoundation',
-    '-i', `none:${index}`,
-    '-ac', '2', // force stereo
-    '-ar', '44100', // force sample rate
-    '-c:a', 'aac',
-    '-b:a', '192k',
-    '-y',
-    output
-  ];
-
-  recordingStartTime = Date.now();
-  ffmpegProcess = spawn(ffmpeg, args);
-
-  ffmpegProcess.stderr.on('data', (data) => {
-    // console.log(`[FFmpeg]: ${data.toString()}`);
-  });
-
-  ffmpegProcess.on('exit', (code) => {
-    console.log(`[FFmpeg exited]: ${code}`);
-  });
-
-  console.log(`🎙️ Recording started → ${output}`);
 }
 
 async function stopRecording(serverUrl, macAddress) {
