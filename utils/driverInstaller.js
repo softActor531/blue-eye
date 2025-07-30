@@ -10,7 +10,6 @@ const si = require('systeminformation');
 
 async function isDriverInstalled() {
   const platform = os.platform();
-  console.log("is driver installed ", platform);
   if (platform === "darwin") {
     return fs.existsSync("/Library/Audio/Plug-Ins/HAL/BlackHole2ch.driver");
   } else if (platform === "win32") {

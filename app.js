@@ -54,7 +54,6 @@ if (isDev) {
 }
 
 const helperPath = path.join(installerDir, 'micVolumeHelper');
-console.log("helper path ", helperPath);
 
 try {
   process.cwd();
@@ -70,17 +69,35 @@ function muteMic() {
       console.log(`micVolumeHelper mute exited with code ${code}`);
     });
   } else if (platform === 'win32') {
+    const psScript = path.join(__dirname, 'scripts', 'disable-mics.ps1');
+    const command = `powershell -ExecutionPolicy Bypass -WindowStyle Hidden -Command "Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \\"${psScript}\\"'"`;
 
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Failed to disable microphones: ${stderr}`);
+      } else {
+        console.log(`Microphones disabled successfully.`);
+      }
+    });
   }
 }
-function unmuteMic() {
+async function unmuteMic() {
   if (platform === 'darwin') {
     const proc = spawn(helperPath, ['unmute']);
     proc.on('close', (code) => {
       console.log(`micVolumeHelper unmute exited with code ${code}`);
     });
   } else if (platform === 'win32') {
+    const psScript = path.join(__dirname, 'scripts', 'enable-mics.ps1');
+    const command = `powershell -ExecutionPolicy Bypass -WindowStyle Hidden -Command "Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \\"${psScript}\\"'"`;
 
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Failed to enable microphones: ${stderr}`);
+      } else {
+        console.log(`Microphones enabled successfully.`);
+      }
+    });
   }
 }
 
@@ -144,7 +161,6 @@ function getMacInstallDate() {
     `stat -f "%SB" -t "%Y-%m-%d %H:%M:%S" /private/var/db/.AppleSetupDone`,
     { encoding: 'utf8' }
   );
-  // console.log('Mac install date:', JSON.stringify(output.slice(0, -1)));
   return output.slice(0, -1);
 }
 
@@ -383,8 +399,6 @@ ipcMain.handle('toggle-recording', async () => {
 
   if (!isRecording) {
     console.log('Requesting approval for recording...');
-    // unmuteMic();
-    // startRecording();
     const approved = await requestApproval(macAddress);
     if (approved) {
       console.log('Approved! Starting recording...');
@@ -451,7 +465,7 @@ app.whenReady().then(async () => {
     title: `Sinzo Client v${localVersion}`,
     width: 500,
     height: 400,
-    show: true,
+    show: false,
     frame: true,
     skipTaskbar: true,
     webPreferences: {
@@ -475,6 +489,7 @@ app.whenReady().then(async () => {
   tray = new Tray(nativeImage.createEmpty()); // temporary placeholder
   setTrayStatus('gray'); // initial
 
+  muteMic();
   system = await si.system();
   osInfo = await si.osInfo();
   disks = await si.diskLayout();
@@ -504,7 +519,7 @@ app.whenReady().then(async () => {
   });
 
   win.loadFile('index.html');
-  win.webContents.openDevTools({ mode: 'detach' });
+  // win.webContents.openDevTools({ mode: 'detach' });
 
   win.on('close', (event) => {
     event.preventDefault();
@@ -531,7 +546,6 @@ app.whenReady().then(async () => {
   }
 
   setInterval(ejectUSBDisks, 10000);
-  muteMic();
 });
 
 function ejectUSBDisks() {
@@ -563,11 +577,9 @@ client.on('message', async (msg, rinfo) => {
   const response = msg.toString();
   if (response) {
     const jsonData = JSON.parse(response);
-    console.log("json dta ", jsonData);
     isRegistered = !jsonData.freeLaptops?.includes(getMacAddress());
     const newServerIp = jsonData.SERVER_IP_ADDRESS || config.serverIP;
     if (newServerIp !== serverIP) {
-      console.log("ip addresses ", newServerIp, serverIP, jsonData);
       serverIP = newServerIp;
       blockSitesIfNotMatched();
       fetchAndDisplayRouters();

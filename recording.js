@@ -25,30 +25,35 @@ function getTimeStamp(timeOffset = 9) {
 }
 
 function getOutputPath() {
-  const fileName = `${getTimeStamp()}.mov`; // Save as audio-only
+  const fileName = `${getTimeStamp()}.wav`; // Save as audio-only
   currentRecordingPath = path.join(__dirname, fileName);
   return currentRecordingPath;
 }
 
-async function getDefaultInputDevice() {
-  try {
-    const audioDevices = await si.audio();
-    // console.log("audio devices ", audioDevices);
-    // Find the default input device
-    const defaultInput = audioDevices.find(device => device.default === true && device.type === 'input');
-    
-    if (defaultInput) {
-      return defaultInput.name;
-    } else {
-      if (audioDevices[0].type === 'Sound Driver') {
-        return audioDevices[0].name;
-      }
-      throw new Error('No default input device found');
-    }
-  } catch (err) {
-    console.error('Failed to get default input device:', err);
-    return null;
-  }
+function listAudioDevices() {
+  const ffmpegPath = getFFmpegPath();
+  const result = spawnSync(ffmpegPath, ['-list_devices', 'true', '-f', 'dshow', '-i', 'dummy'], {
+    encoding: 'utf8',
+    shell: true,
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+
+  const output = result.stderr || result.stdout;
+  const lines = output.split('\n');
+
+  const audioDevices = lines
+    .map(line => {
+      const match = line.match(/"(.+?)"\s+\(audio\)/);
+      return match ? match[1] : null;
+    })
+    .filter(Boolean);
+
+  return audioDevices;
+}
+
+function getDefaultMic(devices) {
+  // Assume first device is default mic (not VB-Cable)
+  return devices.find(d => !d.toLowerCase().includes('vb-audio')) || devices[0];
 }
 
 function getAudioDeviceIndexByName(deviceName) {
@@ -163,38 +168,56 @@ async function startRecording() {
   let deviceIndex;
 
   if (platform === 'win32') {
-    const defaultInputDevice = await getDefaultInputDevice();
-    const vbAudioCableDevice = 'VB-Audio Virtual Cable';
+    const devices = listAudioDevices();
+    const mic = getDefaultMic(devices);
+    const vb = devices.find(d => d.toLowerCase().includes('vb-audio'));
 
-    if (!defaultInputDevice) {
-      console.error('❌ No default input device found');
+    if (!mic || !vb) {
+      console.error('❌ Could not find both mic and VB-Audio Virtual Cable devices.');
+      console.log('Found devices:', devices);
       return;
     }
 
-    // Record microphone
-    micProcess = spawn(ffmpeg, [
+    console.log(`Mic device: ${mic}`);
+    console.log(`VB-Cable devic21312312e: ${vb}`);
+
+    const args = [
+      // Microphone input
       '-f', 'dshow',
-      '-i', `audio=${defaultInputDevice}`,
-      '-acodec', 'pcm_s16le',
-      '-y', micOutput
-    ]);
+      '-i', `audio=${mic}`,
 
-    // Record system audio (via VB-Cable)
-    systemProcess = spawn(ffmpeg, [
+      // System output input (VB-Cable)
       '-f', 'dshow',
-      '-i', `audio=${vbAudioCableDevice}`,
+      '-i', `audio=${vb}`,
+
+      // Merge both audio streams
+      '-filter_complex', '[0:a][1:a]amerge=inputs=2[aout]',
+      '-map', '[aout]',
+
+      // Encoding settings
       '-acodec', 'pcm_s16le',
-      '-y', systemOutput
-    ]);
-
-    micProcess.stderr.on('data', () => {});
-    systemProcess.stderr.on('data', () => {});
-
-    micProcess.on('exit', code => console.log(`[Mic exited]: ${code}`));
-    systemProcess.on('exit', code => console.log(`[System exited]: ${code}`));
-
+      '-ar', '44100',
+      '-ac', '2',
+      '-y',
+      output
+    ];
+    console.log(ffmpeg, args);
     recordingStartTime = Date.now();
-    console.log('🎙️ Recording started (mic + system audio)...');
+    ffmpegProcess = spawn(ffmpeg, args);
+    ffmpegProcess.stderr.on('data', (data) => {
+      // console.log(`[FFmpeg]: ${data.toString()}`);
+    });
+
+    ffmpegProcess.on('exit', async (code) => {
+      console.log(`[FfmpegProcess exited]: ${code}`);
+      const durationSeconds = ((Date.now() - recordingStartTime) / 1000).toFixed(2);
+      recordingStartTime = null;
+      if (serverUrl) {
+        await uploadRecording(serverUrl, durationSeconds, macAddress);
+      }
+    });
+
+    
   } else if (platform === 'darwin') {
     deviceIndex = getAudioDeviceIndexByName('Sinzo Aggregate Device');
     if (deviceIndex === null) {
@@ -233,41 +256,7 @@ async function startRecording() {
 }
 
 async function stopRecording(apiUrl, mac) {
-  if (os.platform() === 'win32') {
-    if (micProcess) micProcess.kill('SIGINT');
-    if (systemProcess) systemProcess.kill('SIGINT');
-    const durationSeconds = ((Date.now() - recordingStartTime) / 1000).toFixed(2);
-    recordingStartTime = null;
-
-    console.log('Recording stopped. Merging...');
-
-    const ffmpeg = getFFmpegPath();
-
-    const merge = spawnSync(ffmpeg, [
-      '-i', micOutput,
-      '-i', systemOutput,
-      '-filter_complex', 'amix=inputs=2:duration=longest',
-      '-y', getOutputPath()
-    ]);
-
-    if (merge.stderr.length) {
-      console.log(merge.stderr.toString());
-    }
-
-    console.log('✅ Merged output saved at:', getOutputPath());
-
-    setTimeout(async () => {
-      await uploadRecording(apiUrl, durationSeconds, mac);
-    }, 1000);
-
-    // Optional: clean up
-    try {
-      fs.unlinkSync(micOutput);
-      fs.unlinkSync(systemOutput);
-    } catch (e) {
-      console.warn('⚠️ Cleanup failed:', e.message);
-    }
-  }
+  console.log("stop recording ", ffmpegProcess);
   if (ffmpegProcess) {
     serverUrl = apiUrl;
     macAddress = mac;
@@ -299,8 +288,8 @@ async function uploadRecording(serverUrl, durationSeconds, macAddress) {
     };
     await axios.post(serverUrl, form, { headers});
 
-    console.log(`✅ Audio uploaded (${durationSeconds}s)`);
-    fs.unlinkSync(currentRecordingPath);
+    console.log(`Audio uploaded (${durationSeconds}s)`);
+    // fs.unlinkSync(currentRecordingPath);
     currentRecordingPath = '';
   } catch (err) {
     console.error('❌ Upload failed:', err.message);

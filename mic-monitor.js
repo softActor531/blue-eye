@@ -51,7 +51,6 @@ function startFFmpegMonitor() {
   });
 
   rl.on("line", async (line) => {
-    console.log("FFmpeg Output:", line);
     // Example line: [Parsed_astats_0 @ 0x...] Channel: 0 RMS level dB: -43.7
     const match = line.match(/RMS level dB:\s*(-?\d+(\.\d+)?)/);
     if (match) {
