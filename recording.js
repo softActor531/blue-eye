@@ -5,17 +5,25 @@ const fs = require('fs');
 const axios = require('axios');
 const si = require('systeminformation');
 const FormData = require('form-data');
+const { app } = require('electron');
+
+const isDev = !app.isPackaged;
 let currentRecordingPath = '';
-let recordingStartTime = null, micProcess, systemProcess;
-const micOutput = path.join(__dirname, 'mic.wav');
-const systemOutput = path.join(__dirname, 'system.wav');
+let recordingStartTime = null;
+const platform = os.platform();
 let serverUrl = '', macAddress = '';
 
 
 function getFFmpegPath() {
-  return os.platform() === 'win32'
-    ? path.join(__dirname, 'assets', 'ffmpeg', 'ffmpeg.exe')
-    : path.join(__dirname, 'assets', 'ffmpeg', 'ffmpeg');
+  let ffmpegPath = '';
+  if (isDev) {
+    ffmpegPath = path.join(__dirname, './assets', 'ffmpeg');
+  } else {
+    ffmpegPath = path.join(process.resourcesPath, 'assets', 'ffmpeg');
+  }
+  return platform === 'win32'
+    ? path.join(ffmpegPath, 'ffmpeg.exe')
+    : path.join(ffmpegPath, 'ffmpeg');
 }
 
 function getTimeStamp(timeOffset = 9) {
@@ -25,8 +33,9 @@ function getTimeStamp(timeOffset = 9) {
 }
 
 function getOutputPath() {
-  const fileName = `${getTimeStamp()}.wav`; // Save as audio-only
-  currentRecordingPath = path.join(__dirname, fileName);
+  const extension = platform === 'win32' ? '.wav' : '.mov';
+  const fileName = `${getTimeStamp()}.${extension}`; // Save as audio-only
+  currentRecordingPath = path.join(os.tmpdir(), fileName);
   return currentRecordingPath;
 }
 
@@ -62,20 +71,20 @@ function getAudioDeviceIndexByName(deviceName) {
   let result;
 
   if (os.platform() === 'win32') {
-    // For Windows, we use DirectShow
+  // For Windows, we use DirectShow
+  result = spawnSync(ffmpegPath, [
+      '-list_devices', 'true',
+      '-f', 'dshow',
+      '-i', 'dummy'
+    ], { encoding: 'utf8', stdio: 'pipe' });
+  } else {
+    // For macOS, we use AVFoundation
     result = spawnSync(ffmpegPath, [
-        '-list_devices', 'true',
-        '-f', 'dshow',
-        '-i', 'dummy'
-      ], { encoding: 'utf8', stdio: 'pipe' });
-    } else {
-      // For macOS, we use AVFoundation
-      result = spawnSync(ffmpegPath, [
-        '-f', 'avfoundation',
-        '-list_devices', 'true',
-        '-i', ''
-      ], { encoding: 'utf8', stdio: 'pipe' });
-    }
+      '-f', 'avfoundation',
+      '-list_devices', 'true',
+      '-i', ''
+    ], { encoding: 'utf8', stdio: 'pipe' });
+  }
 
   const output = result.stderr.toString();
   const lines = output.split('\n');

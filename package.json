@@ -45,6 +45,10 @@
       {
         "from": "installers",
         "to": "installers"
+      },
+      {
+        "from": "assets",
+        "to": "assets"
       }
     ],
     "mac": {

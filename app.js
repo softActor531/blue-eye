@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, nativeImage, ipcMain, desktopCapturer, screen } = require('electron');
+const { app, BrowserWindow, Tray, nativeImage, ipcMain, desktopCapturer, screen, dialog } = require('electron');
 const os = require('os');
 const path = require('path');
 const Store = require('electron-store').default;
@@ -449,6 +449,12 @@ async function captureAndUpload() {
       .catch(err => {
         setTrayStatus('red');
         console.error('Upload failed:', err.message);
+        // dialog.showMessageBox({
+        //   type: 'info',
+        //   message: 'Hello!',
+        //   detail: err.message,
+        //   buttons: ['OK']
+        // });
     });
       // setToolTip('Connection Success.');
     }
