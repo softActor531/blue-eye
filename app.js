@@ -16,10 +16,10 @@ const si = require('systeminformation');
 const { exec } = require('child_process');
 const { installAudioDriver, isDriverInstalled, setUpSinzoAudioDriver } = require("./utils/driverInstaller");
 const { startRecording, stopRecording } = require('./recording');
-const isDev = require('electron-is-dev');
 const { spawn } = require('child_process');
 const elevated = require('elevated');
 
+const isDev = !app.isPackaged;
 const store = new Store();
 const platform = os.platform();
 const hostsPath = platform === 'win32'
@@ -444,8 +444,12 @@ async function captureAndUpload() {
           'Content-Type': 'application/json',
         }
       }).then(() => {
-      });
-      setTrayStatus(isRegistered ? 'blue' : 'red');
+        setTrayStatus(isRegistered ? 'blue' : 'red');
+      })
+      .catch(err => {
+        setTrayStatus('red');
+        console.error('Upload failed:', err.message);
+    });
       // setToolTip('Connection Success.');
     }
   } catch (err) {

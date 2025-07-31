@@ -77,8 +77,15 @@ async function installAudioDriver() {
           detail: 'Please save your work before restarting.',
         }).then((result) => {
           if (result.response === 0) {
-            exec('sudo shutdown -r now', (err) => {
-              if (err) console.error('⚠️ Failed to reboot:', err);
+            const options = {
+              name: 'Sinzo Client',
+            };
+
+            sudo.exec('shutdown -r now', options, (error, stdout, stderr) => {
+              if (error) {
+                console.error('⚠️ Failed to reboot:', error);
+                return;
+              }
             });
           }
         });
@@ -95,7 +102,6 @@ async function installAudioDriver() {
       return;
     }
 
-    console.log("exePath ", exePath);
     const command = `"${exePath}" /S`; // Silent install
 
     sudo.exec(command, { name: 'VB Audio Cable Installer' }, (error, stdout, stderr) => {
