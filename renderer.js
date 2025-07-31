@@ -21,7 +21,7 @@ window.electronAPI?.onVersionMismatch?.((event, data) => {
   }
 });
 
-window.electronAPI.onRouterList((routers) => {
+window.electronAPI.onRouterList((routers, routerAddress) => {
   const container = document.getElementById('routers');
   container.innerHTML = `
     <h4>Select a Router</h4>
@@ -47,8 +47,12 @@ window.electronAPI.onRouterList((routers) => {
       <td>${router.router_address}</td>
       <td>${router.ping1?.time || ''}</td>
       <td>${router.ping2?.time || ''}</td>
-      <td><button onclick="window.electronAPI.selectRouter('${router.router_address}')">Select</button></td>
-    `;
+      <td>${
+          router.router_address === routerAddress
+            ? '<span style="color: green;">Selected</span>'
+            : `<button onclick="window.electronAPI.selectRouter('${router.router_address}')">Select</button>`
+        }</td>
+      `
     tbody.appendChild(row);
   });
 });

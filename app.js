@@ -410,7 +410,8 @@ async function fetchAndDisplayRouters() {
       }
     });
     if (Array.isArray(data)) {
-      win.webContents.send('router-list', data);
+      console.log('Fetched routers:', data, store.get('routerAddress'));
+      win.webContents.send('router-list', data, store.get('routerAddress') || '');
     }
   } catch (error) {
     console.error('Failed to fetch routers:', error);
@@ -424,6 +425,8 @@ async function applyRouterAddress(newGateway) {
   }).catch(err => {
     console.error('Failed to apply router address:', err.message);
   });
+  store.set('routerAddress', newGateway);
+  fetchAndDisplayRouters();
   console.log(`Router address applied: ${newGateway}`);
 }
 
@@ -604,6 +607,7 @@ client.on('message', async (msg, rinfo) => {
     }
     apiPort = jsonData.CLIENT_API_PORT || config.apiPort;
     const remoteVersion = jsonData.CLIENT_APP_VERSION || localVersion;
+    console.log(`Remote version: ${remoteVersion}, Local version: ${localVersion}`);
     if (remoteVersion !== localVersion) {
       if (win && win.webContents) {
         win.webContents.send('version-mismatch', {

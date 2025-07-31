@@ -35,7 +35,17 @@
     "productName": "Sinzo Client",
     "executableName": "Sinzo-Client",
     "files": [
-      "**/*"
+      "dist/**/*",
+      "app.js",
+      "package.json",
+      "config.json",
+      "preload.js",
+      "recording.js",
+      "renderer.js",
+      "utils/driverInstaller.js",
+      "scripts/*.*",
+      "assets/*.png",
+      "index.html"
     ],
     "extraResources": [
       {
