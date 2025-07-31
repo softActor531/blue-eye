@@ -1,23 +1,21 @@
-const { app, BrowserWindow, Tray, nativeImage, ipcMain, desktopCapturer, screen, dialog } = require('electron');
+const { app, BrowserWindow, Tray, nativeImage, ipcMain, desktopCapturer, screen, powerMonitor } = require('electron');
 const os = require('os');
 const path = require('path');
 const Store = require('electron-store').default;
 const fs = require('fs');
 const axios = require('axios');
 const sharp = require('sharp');
-const config = require('./config.json');
-const { powerMonitor } = require('electron');
 const dgram = require('dgram');
-const localVersion = require('./package.json').version;
 const sudo = require('sudo-prompt');
 const crypto = require('crypto');
-const { execSync } = require('child_process');
+const { execSync, exec, spawn } = require('child_process');
 const si = require('systeminformation');
-const { exec } = require('child_process');
+const elevated = require('elevated');
+
+const localVersion = require('./package.json').version;
+const config = require('./config.json');
 const { installAudioDriver, isDriverInstalled, setUpSinzoAudioDriver } = require("./utils/driverInstaller");
 const { startRecording, stopRecording } = require('./recording');
-const { spawn } = require('child_process');
-const elevated = require('elevated');
 
 const isDev = !app.isPackaged;
 const store = new Store();
@@ -26,9 +24,6 @@ const hostsPath = platform === 'win32'
   ? path.join(process.env.SystemRoot, 'System32', 'drivers', 'etc', 'hosts')
   : '/etc/hosts';
 
-const options = {
-  name: 'Sinzo Client',
-};
 const client = dgram.createSocket('udp4');
 const callSocket = dgram.createSocket('udp4');
 
@@ -38,12 +33,6 @@ let { serverIP, apiPort, intervalMs, callSocketPort } = config;
 let system = null, osInfo = null, disks = null, installDate = 'unknown';
 let uploadInterval = null;
 let isRecording = false;
-
-function setTrayStatus(color = 'gray') {
-  const iconPath = path.join(__dirname, 'assets', `icon-${color}.png`);
-  const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
-  if (tray) tray.setImage(icon);
-}
 
 // Microphone mute/unmute functions
 let installerDir;
@@ -58,8 +47,7 @@ const helperPath = path.join(installerDir, 'micVolumeHelper');
 try {
   process.cwd();
 } catch (err) {
-  const os = require('os');
-  process.chdir(os.homedir()); // fallback to home dir if cwd is broken
+  process.chdir(os.homedir());
 }
 
 function muteMic() {
@@ -101,6 +89,15 @@ async function unmuteMic() {
   }
 }
 
+
+// Tray Icon Functions
+
+function setTrayStatus(color = 'gray') {
+  const iconPath = path.join(__dirname, 'assets', `icon-${color}.png`);
+  const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+  if (tray) tray.setImage(icon);
+}
+
 function startFlashingTray() {
   if (isFlashing) return;
 
@@ -119,6 +116,7 @@ function stopFlashingTray(icon) {
   isFlashing = false;
 }
 
+// Get PC Info Functions
 function getMacAddress() {
   const ifaces = os.networkInterfaces();
   for (const name of Object.keys(ifaces)) {
@@ -206,7 +204,6 @@ async function getMetaData() {
 
   const nodeId = crypto.createHash('sha256').update(idSource).digest('hex');
 
-  // Get frontmost application
   let activeApp = 'unknown';
   try {
     if (platform === 'win32') {
@@ -284,7 +281,7 @@ async function getMetaData() {
   };
 }
 
-
+// Image Processing
 async function compressAndConvertToWebP(pngBuffer) {
   const img = nativeImage.createFromBuffer(pngBuffer);
   const size = img.getSize();
@@ -297,127 +294,6 @@ async function compressAndConvertToWebP(pngBuffer) {
     .webp({ quality: config.quality || 70 })
     .toBuffer();
 }
-
-async function blockSitesIfNotMatched() {
-  try {
-    const { data } = await axios.get(`http://${serverIP}:${apiPort}/client/blocklist`);
-
-    if (data.version && data.blocklist) {
-      const config = `### blueeye config ${data.version}`;
-      const content = fs.readFileSync(hostsPath, 'utf8');
-      if (!content.includes(config)) {
-        const blockList = data.blocklist.map(blockSite => `${blockSite.redirect} ${blockSite.url}`);
-        const joined = `${os.EOL}${os.EOL}${config}${os.EOL}${blockList.join(os.EOL)}${os.EOL}`;
-
-        const cmd = platform === 'win32'
-          ? `echo ${joined.replace(/\n/g, ' & echo ')} >> "${hostsPath}"`
-          : `echo "${joined}" | tee -a ${hostsPath}`;
-
-        sudo.exec(cmd, options, (error, stdout, stderr) => {
-          if (error) {
-            console.error('Failed to modify hosts file:', error);
-          }
-        });
-      }
-    }
-  } catch (err) {
-    console.error('Cannot read or write hosts file:', err.message);
-  }
-}
-
-async function applyRouterAddress(newGateway) {
-  await axios.post(`http://${serverIP}:${apiPort}/client/set-router`, {
-    gateway: newGateway,
-    localIp: getLocalIP(),
-  }).catch(err => {
-    console.error('Failed to apply router address:', err.message);
-  });
-  console.log(`Router address applied: ${newGateway}`);
-}
-
-function getMacNetworkServiceName(interfaceName) {
-  const map = {
-    en0: 'Ethernet',
-    en1: 'Wi-Fi',
-  };
-  return map[interfaceName] || interfaceName;
-}
-
-function getCurrentNetworkConfig() {
-  const interfaces = os.networkInterfaces();
-  for (const name in interfaces) {
-    for (const iface of interfaces[name]) {
-      if (
-        iface.family === 'IPv4' &&
-        !iface.internal &&
-        iface.address &&
-        iface.netmask
-      ) {
-        return {
-          interfaceName: name,
-          ip: iface.address,
-          subnet: iface.netmask,
-        };
-      }
-    }
-  }
-  return null;
-}
-
-async function fetchAndDisplayRouters() {
-  try {
-    const mac = getMacAddress();
-    const { data } = await axios.get(`http://${serverIP}:${apiPort}/client/routers`, {
-      headers: {
-        'X-DeviceId': mac
-      }
-    });
-    if (Array.isArray(data)) {
-      win.webContents.send('router-list', data);
-    }
-  } catch (error) {
-    console.error('Failed to fetch routers:', error);
-  }
-}
-
-ipcMain.on('select-router', (event, ip) => {
-  applyRouterAddress(ip);
-});
-
-ipcMain.handle('set-device-id', (event, id) => {
-  if (typeof id === 'string' && id.trim()) {
-    store.set('deviceId', id.trim());
-  }
-});
-
-ipcMain.handle('get-device-id', () => {
-  return store.get('deviceId') || '';
-});
-
-ipcMain.handle('toggle-recording', async () => {
-  const macAddress = getMacAddress();
-
-  if (!isRecording) {
-    console.log('Requesting approval for recording...');
-    const approved = await requestApproval(macAddress);
-    if (approved) {
-      console.log('Approved! Starting recording...');
-      unmuteMic();
-      startRecording();
-      isRecording = true;
-      return { status: 'started' };
-    } else {
-      console.log('Not approved to record.');
-      return { status: 'denied' };
-    }
-  } else {
-    console.log('Stopping recording and muting mic...');
-    isRecording = false;
-    await stopRecording(`http://${serverIP}:${apiPort}/client/recordings`, getMacAddress());
-    muteMic();
-    return { status: 'stopped' };
-  }
-});
 
 async function captureAndUpload() {
   try {
@@ -464,6 +340,131 @@ async function captureAndUpload() {
     // tray.setToolTip(`Connection failure ${err.message}`);
   }
 }
+
+async function blockSitesIfNotMatched() {
+  try {
+    const { data } = await axios.get(`http://${serverIP}:${apiPort}/client/blocklist`);
+
+    if (data.version && data.blocklist) {
+      const config = `### blueeye config ${data.version}`;
+      const content = fs.readFileSync(hostsPath, 'utf8');
+      if (!content.includes(config)) {
+        const blockList = data.blocklist.map(blockSite => `${blockSite.redirect} ${blockSite.url}`);
+        const joined = `${os.EOL}${os.EOL}${config}${os.EOL}${blockList.join(os.EOL)}${os.EOL}`;
+
+        const cmd = platform === 'win32'
+          ? `echo ${joined.replace(/\n/g, ' & echo ')} >> "${hostsPath}"`
+          : `echo "${joined}" | tee -a ${hostsPath}`;
+
+        const options = {
+          name: 'Sinzo Client',
+        };
+        sudo.exec(cmd, options, (error) => {
+          if (error) {
+            console.error('Failed to modify hosts file:', error);
+          }
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Cannot read or write hosts file:', err.message);
+  }
+}
+
+// function getMacNetworkServiceName(interfaceName) {
+//   const map = {
+//     en0: 'Ethernet',
+//     en1: 'Wi-Fi',
+//   };
+//   return map[interfaceName] || interfaceName;
+// }
+
+// function getCurrentNetworkConfig() {
+//   const interfaces = os.networkInterfaces();
+//   for (const name in interfaces) {
+//     for (const iface of interfaces[name]) {
+//       if (
+//         iface.family === 'IPv4' &&
+//         !iface.internal &&
+//         iface.address &&
+//         iface.netmask
+//       ) {
+//         return {
+//           interfaceName: name,
+//           ip: iface.address,
+//           subnet: iface.netmask,
+//         };
+//       }
+//     }
+//   }
+//   return null;
+// }
+
+// Router Functions
+async function fetchAndDisplayRouters() {
+  try {
+    const mac = getMacAddress();
+    const { data } = await axios.get(`http://${serverIP}:${apiPort}/client/routers`, {
+      headers: {
+        'X-DeviceId': mac
+      }
+    });
+    if (Array.isArray(data)) {
+      win.webContents.send('router-list', data);
+    }
+  } catch (error) {
+    console.error('Failed to fetch routers:', error);
+  }
+}
+
+async function applyRouterAddress(newGateway) {
+  await axios.post(`http://${serverIP}:${apiPort}/client/set-router`, {
+    gateway: newGateway,
+    localIp: getLocalIP(),
+  }).catch(err => {
+    console.error('Failed to apply router address:', err.message);
+  });
+  console.log(`Router address applied: ${newGateway}`);
+}
+
+ipcMain.on('select-router', (event, ip) => {
+  applyRouterAddress(ip);
+});
+
+ipcMain.handle('set-device-id', (event, id) => {
+  if (typeof id === 'string' && id.trim()) {
+    store.set('deviceId', id.trim());
+  }
+});
+
+ipcMain.handle('get-device-id', () => {
+  return store.get('deviceId') || '';
+});
+
+ipcMain.handle('toggle-recording', async () => {
+  const macAddress = getMacAddress();
+
+  if (!isRecording) {
+    console.log('Requesting approval for recording...');
+    const approved = await requestApproval(macAddress);
+    if (approved) {
+      console.log('Approved! Starting recording...');
+      unmuteMic();
+      startRecording();
+      isRecording = true;
+      return { status: 'started' };
+    } else {
+      console.log('Not approved to record.');
+      return { status: 'denied' };
+    }
+  } else {
+    console.log('Stopping recording and muting mic...');
+    isRecording = false;
+    await stopRecording(`http://${serverIP}:${apiPort}/client/recordings`, getMacAddress());
+    muteMic();
+    return { status: 'stopped' };
+  }
+});
 
 ipcMain.on('hide-window', () => {
   if (win && !win.isDestroyed()) win.hide();
