@@ -410,7 +410,6 @@ async function fetchAndDisplayRouters() {
       }
     });
     if (Array.isArray(data)) {
-      console.log('Fetched routers:', data, store.get('routerAddress'));
       win.webContents.send('router-list', data, store.get('routerAddress') || '');
     }
   } catch (error) {
@@ -427,7 +426,6 @@ async function applyRouterAddress(newGateway) {
   });
   store.set('routerAddress', newGateway);
   fetchAndDisplayRouters();
-  console.log(`Router address applied: ${newGateway}`);
 }
 
 ipcMain.on('select-router', (event, ip) => {
@@ -607,7 +605,6 @@ client.on('message', async (msg, rinfo) => {
     }
     apiPort = jsonData.CLIENT_API_PORT || config.apiPort;
     const remoteVersion = jsonData.CLIENT_APP_VERSION || localVersion;
-    console.log(`Remote version: ${remoteVersion}, Local version: ${localVersion}`);
     if (remoteVersion !== localVersion) {
       if (win && win.webContents) {
         win.webContents.send('version-mismatch', {

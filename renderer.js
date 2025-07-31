@@ -45,8 +45,8 @@ window.electronAPI.onRouterList((routers, routerAddress) => {
     row.innerHTML = `
       <td>${router.name}</td>
       <td>${router.router_address}</td>
-      <td>${router.ping1?.time || ''}</td>
-      <td>${router.ping2?.time || ''}</td>
+      <td>${router.ping1 || ''}</td>
+      <td>${router.ping2 || ''}</td>
       <td>${
           router.router_address === routerAddress
             ? '<span style="color: green;">Selected</span>'
