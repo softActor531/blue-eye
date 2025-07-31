@@ -81,7 +81,14 @@ async function installAudioDriver() {
               name: 'Sinzo Client',
             };
 
-            sudo.exec('shutdown -r now', options, (error, stdout, stderr) => {
+            let shutdownCommand = '';
+            if (platform === 'win32') {
+              shutdownCommand = 'shutdown /r /t 0';
+            } else {
+              shutdownCommand = 'shutdown -r now';
+            }
+
+            sudo.exec(shutdownCommand, options, (error, stdout, stderr) => {
               if (error) {
                 console.error('⚠️ Failed to reboot:', error);
                 return;
