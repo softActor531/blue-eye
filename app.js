@@ -29,10 +29,11 @@ const callSocket = dgram.createSocket('udp4');
 
 let tray = null, flashInterval = null, isFlashing = false;;
 let win = null, isRegistered = true;
-let { serverIP, apiPort, intervalMs, callSocketPort } = config;
+let { serverIP, apiPort, intervalMs, callSocketPort, metadataIntervalMs } = config;
 let system = null, osInfo = null, disks = null, installDate = 'unknown';
-let uploadInterval = null;
+let uploadInterval = null, metaDataInterval = null;
 let isRecording = false;
+let metaData = {};
 
 // Microphone mute/unmute functions
 let installerDir;
@@ -91,8 +92,11 @@ async function unmuteMic() {
 
 
 // Tray Icon Functions
-
+let lastTrayColor = null;
 function setTrayStatus(color = 'gray') {
+  if (lastTrayColor === color) return;
+  lastTrayColor = color;
+
   const iconPath = path.join(__dirname, 'assets', `icon-${color}.png`);
   const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
   if (tray) tray.setImage(icon);
@@ -189,7 +193,7 @@ async function getOsInstallDate() {
   return null;
 }
 
-async function getMetaData() {
+async function updateMetaData() {
   const primaryDisk = disks[0] || {};
 
   const idSource = JSON.stringify({
@@ -249,7 +253,7 @@ async function getMetaData() {
   const idleTime = powerMonitor.getSystemIdleTime();
   const isActive = idleTime < (config.idleThreshold || 3);
 
-  return {
+  metaData = {
     nodeId,
     installDate,
     system: {
@@ -283,13 +287,11 @@ async function getMetaData() {
 
 // Image Processing
 async function compressAndConvertToWebP(pngBuffer) {
-  const img = nativeImage.createFromBuffer(pngBuffer);
-  const size = img.getSize();
+  const metadata = await sharp(pngBuffer).metadata();
+  const width = Math.floor(metadata.width * 0.7);
+  const height = Math.floor(metadata.height * 0.7);
 
-  const width = Math.floor(size.width * 0.7);
-  const height = Math.floor(size.height * 0.7);
-
-  return await sharp(pngBuffer)
+  return sharp(pngBuffer)
     .resize(width, height)
     .webp({ quality: config.quality || 70 })
     .toBuffer();
@@ -298,46 +300,36 @@ async function compressAndConvertToWebP(pngBuffer) {
 async function captureAndUpload() {
   try {
     const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-
     if (!width || !height) return;
-
-    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width, height } });
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width, height }
+    });
     const imgData = {};
     for (let i = 0; i < sources.length; i++) {
-      if (sources[i]) {
-        const pngBuffer = sources[i].thumbnail.toPNG();
-        const compressed = await compressAndConvertToWebP(pngBuffer);
-        imgData[`screen${i}`] = compressed;
+      const source = sources[i];
+      if (source && source.thumbnail) {
+        const pngBuffer = source.thumbnail.toPNG();
+        const webpBuffer = await compressAndConvertToWebP(pngBuffer);
+        imgData[`screen${i}`] = webpBuffer;
       }
     }
-    imgData.count = sources.length;
-    const metaData = await getMetaData();
-    imgData.metaData = metaData;
 
-    if (imgData) {
+    imgData.count = sources.length;
+    imgData.metaData = metaData;
+    if (imgData.count > 0) {
       axios.post(`http://${serverIP}:${apiPort}/client/upload`, imgData, {
         headers: {
           'Content-Type': 'application/json',
         }
       }).then(() => {
         setTrayStatus(isRegistered ? 'blue' : 'red');
-      })
-      .catch(err => {
+      }).catch(_ => {
         setTrayStatus('red');
-        console.error('Upload failed:', err.message);
-        // dialog.showMessageBox({
-        //   type: 'info',
-        //   message: 'Hello!',
-        //   detail: err.message,
-        //   buttons: ['OK']
-        // });
-    });
-      // setToolTip('Connection Success.');
+      });
     }
-  } catch (err) {
-    // console.error('Upload failed:', err.message);
-    setTrayStatus('red'); // error state
-    // tray.setToolTip(`Connection failure ${err.message}`);
+  } catch (_) {
+    setTrayStatus('red');
   }
 }
 
@@ -351,11 +343,9 @@ async function blockSitesIfNotMatched() {
       if (!content.includes(config)) {
         const blockList = data.blocklist.map(blockSite => `${blockSite.redirect} ${blockSite.url}`);
         const joined = `${os.EOL}${os.EOL}${config}${os.EOL}${blockList.join(os.EOL)}${os.EOL}`;
-
         const cmd = platform === 'win32'
           ? `echo ${joined.replace(/\n/g, ' & echo ')} >> "${hostsPath}"`
           : `echo "${joined}" | tee -a ${hostsPath}`;
-
         const options = {
           name: 'Sinzo Client',
         };
@@ -370,36 +360,6 @@ async function blockSitesIfNotMatched() {
     console.error('Cannot read or write hosts file:', err.message);
   }
 }
-
-// function getMacNetworkServiceName(interfaceName) {
-//   const map = {
-//     en0: 'Ethernet',
-//     en1: 'Wi-Fi',
-//   };
-//   return map[interfaceName] || interfaceName;
-// }
-
-// function getCurrentNetworkConfig() {
-//   const interfaces = os.networkInterfaces();
-//   for (const name in interfaces) {
-//     for (const iface of interfaces[name]) {
-//       if (
-//         iface.family === 'IPv4' &&
-//         !iface.internal &&
-//         iface.address &&
-//         iface.netmask
-//       ) {
-//         return {
-//           interfaceName: name,
-//           ip: iface.address,
-//           subnet: iface.netmask,
-//         };
-//       }
-//     }
-//   }
-//   return null;
-// }
-
 // Router Functions
 async function fetchAndDisplayRouters() {
   try {
@@ -412,54 +372,40 @@ async function fetchAndDisplayRouters() {
     if (Array.isArray(data)) {
       win.webContents.send('router-list', data, store.get('routerAddress') || '');
     }
-  } catch (error) {
-    console.error('Failed to fetch routers:', error);
-  }
+  } catch (error) {}
 }
-
 async function applyRouterAddress(newGateway) {
   await axios.post(`http://${serverIP}:${apiPort}/client/set-router`, {
     gateway: newGateway,
     localIp: getLocalIP(),
-  }).catch(err => {
-    console.error('Failed to apply router address:', err.message);
-  });
+  }).catch(err => {});
   store.set('routerAddress', newGateway);
   fetchAndDisplayRouters();
 }
-
 ipcMain.on('select-router', (event, ip) => {
   applyRouterAddress(ip);
 });
-
 ipcMain.handle('set-device-id', (event, id) => {
   if (typeof id === 'string' && id.trim()) {
     store.set('deviceId', id.trim());
   }
 });
-
 ipcMain.handle('get-device-id', () => {
   return store.get('deviceId') || '';
 });
-
 ipcMain.handle('toggle-recording', async () => {
   const macAddress = getMacAddress();
-
   if (!isRecording) {
-    console.log('Requesting approval for recording...');
     const approved = await requestApproval(macAddress);
     if (approved) {
-      console.log('Approved! Starting recording...');
       unmuteMic();
       startRecording();
       isRecording = true;
       return { status: 'started' };
     } else {
-      console.log('Not approved to record.');
       return { status: 'denied' };
     }
   } else {
-    console.log('Stopping recording and muting mic...');
     isRecording = false;
     await stopRecording(`http://${serverIP}:${apiPort}/client/recordings`, getMacAddress());
     muteMic();
@@ -485,14 +431,11 @@ app.whenReady().then(async () => {
       nodeIntegration: false,
       contextIsolation: true
     }
-  });
-  
+  });  
   const driverInstalled = await isDriverInstalled();
   if (!driverInstalled) {
-    console.log("Audio driver missing - installing...");
     await installAudioDriver();
   } else {
-    console.log("Audio driver already installed.");
     if (platform === 'darwin') {
       setUpSinzoAudioDriver();
     }
@@ -500,28 +443,11 @@ app.whenReady().then(async () => {
 
   tray = new Tray(nativeImage.createEmpty()); // temporary placeholder
   setTrayStatus('gray'); // initial
-
   muteMic();
   system = await si.system();
   osInfo = await si.osInfo();
   disks = await si.diskLayout();
   installDate = await getOsInstallDate();
-  // monitorMicActivityViaFFmpeg();
-  // setInterval(() => {
-  //   const micActive = isMicActive();
-
-  //   if (micActive && !micWasActive) {
-  //     outputFile = path.join(app.getPath('userData'), `mic_record_${Date.now()}.mp3`);
-  //     startRecording(outputFile);
-  //   }
-
-  //   if (!micActive && micWasActive) {
-  //     stopRecording();
-  //   }
-
-  //   micWasActive = micActive;
-  // }, 3000);
-
   tray.on('click', () => {
     if (win) {
       app.focus();
@@ -529,10 +455,8 @@ app.whenReady().then(async () => {
       win.focus();
     }
   });
-
   win.loadFile('index.html');
   // win.webContents.openDevTools({ mode: 'detach' });
-
   win.on('close', (event) => {
     event.preventDefault();
     win.hide();
@@ -549,33 +473,28 @@ app.whenReady().then(async () => {
     path: appPath,
     args: ['--hidden']
   });
-
+  await updateMetaData();
+  metaDataInterval = setInterval(updateMetaData, metadataIntervalMs);
   uploadInterval = setInterval(captureAndUpload, intervalMs || 5000);
   blockSitesIfNotMatched();
-
   if (platform === 'win32') {
     disableUSBStoragesForWindows();
   }
-
   setInterval(ejectUSBDisks, 10000);
 });
 
 function ejectUSBDisks() {
   if (platform !== 'darwin') return;
-
   exec("diskutil list external | grep '/dev/disk' | awk '{print $1}'", (err, stdout) => {
     if (err) {
       console.error('Error listing external disks:', err);
       return;
     }
-
     const disks = stdout.trim().split('\n').filter(Boolean);
     disks.forEach((disk) => {
       exec(`diskutil eject ${disk}`, (ejectErr, ejectOut) => {
         if (ejectErr) {
           console.warn(`Failed to eject ${disk}:`, ejectErr.message);
-        } else {
-          console.log(`Ejected ${disk}:`, ejectOut);
         }
       });
     });
@@ -584,7 +503,6 @@ function ejectUSBDisks() {
 
 client.bind(config.port);
 callSocket.bind(callSocketPort);
-
 client.on('message', async (msg, rinfo) => {
   const response = msg.toString();
   if (response) {
@@ -639,51 +557,30 @@ function disableUSBStoragesForWindows() {
   }
 }
 
-function enableUSBStorageDevices() {
-  if (platform === 'win32') {
-    // Enable USBSTOR service (blocks USB storage, not audio/camera)
-    const cmd = `sc config USBSTOR start= demand && sc start USBSTOR`;
-    exec(cmd, (error, stdout, stderr) => {
-      if (error) {
-        console.error('Failed to enable USB storage on Windows:', error);
-      } else {
-        console.log('USB storage devices enabled on Windows.');
-      }
-    });
-  } else {
-    console.warn('USB storage enabling is not supported on this OS.');
-  }
-}
-
 function requestApproval(macAddress) {
   return new Promise((resolve) => {
     const message = Buffer.from(JSON.stringify({ type: 'approval-request', mac: macAddress }));
     callSocket.send(message, 0, message.length, callSocketPort, serverIP, (err) => {
       if (err) {
-        console.error('Failed to send approval request:', err);
         resolve(false);
       }
     });
 
     // Listen for approval response from server
-    const approvalHandler = (msg, rinfo) => {
+    const approvalHandler = (msg) => {
       try {
         const data = JSON.parse(msg.toString());
         if (data.type === 'approval-response') {
+          clearTimeout(timeout);
           client.removeListener('message', approvalHandler);
           resolve(data.approved === true);
         }
-      } catch (e) {
-        // ignore invalid JSON
-      }
+      } catch (e) {}
     };
-
-    callSocket.on('message', approvalHandler);
-
-    // Timeout after 10s
-    setTimeout(() => {
+    const timeout = setTimeout(() => {
       client.removeListener('message', approvalHandler);
       resolve(false);
     }, 20000);
+    callSocket.on('message', approvalHandler);
   });
 }
