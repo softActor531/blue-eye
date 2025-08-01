@@ -3,7 +3,7 @@
   "serverIP": "172.20.101.1",
   "quality": 70,
   "idleThreshold": 2,
-  "port": 8925,
+  "port": 8924,
   "apiPort": 8923,
   "callSocketPort": 8920,
   "metadataIntervalMs": 30000
