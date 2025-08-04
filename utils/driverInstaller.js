@@ -62,7 +62,7 @@ async function installAudioDriver() {
     const command = `installer -pkg "${pkgPath}" -target /`;
     
 
-    sudo.exec(command, { name: "Sinzo Client Installer" }, (error, stdout, stderr) => {
+    sudo.exec(command, { name: "Wite Installer" }, (error, stdout, stderr) => {
       if (error) {
         console.error("❌ BlackHole install failed:", error);
       } else {
@@ -78,7 +78,7 @@ async function installAudioDriver() {
         }).then((result) => {
           if (result.response === 0) {
             const options = {
-              name: 'Sinzo Client',
+              name: 'Wite',
             };
 
             const shutdownCommand = 'shutdown -r now';

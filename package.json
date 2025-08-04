@@ -1,7 +1,7 @@
 {
-  "name": "sinzo-client",
+  "name": "wite",
   "version": "1.2.4",
-  "productName": "Sinzo Client",
+  "productName": "Wite",
   "description": "",
   "main": "app.js",
   "scripts": {
@@ -31,9 +31,9 @@
     "systeminformation": "^5.27.7"
   },
   "build": {
-    "appId": "com.sinzo.client",
-    "productName": "Sinzo Client",
-    "executableName": "Sinzo-Client",
+    "appId": "com.wite.client",
+    "productName": "Wite",
+    "executableName": "Wite",
     "files": [
       "dist/**/*",
       "app.js",

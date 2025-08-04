@@ -347,7 +347,7 @@ async function blockSitesIfNotMatched() {
           ? `echo ${joined.replace(/\n/g, ' & echo ')} >> "${hostsPath}"`
           : `echo "${joined}" | tee -a ${hostsPath}`;
         const options = {
-          name: 'Sinzo Client',
+          name: 'Wite',
         };
         sudo.exec(cmd, options, (error) => {
           if (error) {
@@ -420,7 +420,7 @@ ipcMain.on('hide-window', () => {
 app.whenReady().then(async () => {
   if (platform === 'darwin') app.dock.hide();
   win = new BrowserWindow({
-    title: `Sinzo Client v${localVersion}`,
+    title: `Wite v${localVersion}`,
     width: 500,
     height: 400,
     show: false,
