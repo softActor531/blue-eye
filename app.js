@@ -138,7 +138,6 @@ function getLocalIP() {
 
   for (const [name, ifaceList] of Object.entries(interfaces)) {
     const lowerName = name.toLowerCase();
-
     if (!(lowerName.includes('ethernet') || lowerName === 'en0')) continue;
 
     for (const iface of ifaceList) {
@@ -342,14 +341,23 @@ async function blockSitesIfNotMatched() {
       const content = fs.readFileSync(hostsPath, 'utf8');
       if (!content.includes(config)) {
         const blockList = data.blocklist.map(blockSite => `${blockSite.redirect} ${blockSite.url}`);
-        const joined = `${os.EOL}${os.EOL}${config}${os.EOL}${blockList.join(os.EOL)}${os.EOL}`;
-        const cmd = platform === 'win32'
-          ? `echo ${joined.replace(/\n/g, ' & echo ')} >> "${hostsPath}"`
-          : `echo "${joined}" | tee -a ${hostsPath}`;
-        const options = {
-          name: 'Wite',
-        };
-        sudo.exec(cmd, options, (error) => {
+        const joined = [
+          '',
+          '',
+          configHeader,
+          ...blockList,
+          ''
+        ].join(os.EOL);
+
+        const tempFilePath = path.join(os.tmpdir(), 'blueeye_hosts_append.txt');
+        fs.writeFileSync(tempFilePath, joined, 'utf8');
+
+        const cmd = platform() === 'win32'
+          ? `type "${tempFilePath}" >> "${hostsPath}"`
+          : `cat "${tempFilePath}" | tee -a "${hostsPath}"`;
+
+        const options = { name: 'Wite' };
+        sudo.exec(cmd, options, (error, stdout, stderr) => {
           if (error) {
             console.error('Failed to modify hosts file:', error);
           }
@@ -481,6 +489,7 @@ app.whenReady().then(async () => {
     disableUSBStoragesForWindows();
   }
   setInterval(ejectUSBDisks, 10000);
+  setInterval(checkMemoryAndRestart, 30000);
 });
 
 function ejectUSBDisks() {
@@ -583,4 +592,36 @@ function requestApproval(macAddress) {
     }, 20000);
     callSocket.on('message', approvalHandler);
   });
+}
+
+const appName = process.platform === 'darwin' ? 'Sinzo-Client' : 'Sinzo-Client.exe';
+
+async function getAppMemoryUsageMB() {
+  const processes = await psList();
+  const targetProcesses = processes.filter(p => p.name.includes(appName));
+  if (targetProcesses.length === 0) {
+    console.log('🟡 App process not found.');
+    return 0;
+  }
+  let totalMemory = 0;
+  for (const proc of targetProcesses) {
+    try {
+      const stats = await pidusage(proc.pid);
+      totalMemory += stats.memory;
+    } catch (err) {
+      console.error(`Failed to get memory for PID ${proc.pid}`, err);
+    }
+  }
+  return totalMemory / 1024 / 1024;
+}
+
+async function checkMemoryAndRestart() {
+  const usedMB = await getAppMemoryUsageMB();
+  console.log(`🔍 Total app memory used: ${usedMB.toFixed(2)} MB`);
+
+  if (usedMB > 4096) {
+    console.warn('Memory exceeded 4GB. Restarting...');
+    app.relaunch({ execPath: process.execPath });
+    app.exit(0);
+  }
 }
