@@ -336,7 +336,6 @@ async function captureAndUpload() {
 async function blockSitesIfNotMatched() {
   try {
     const { data } = await axios.get(`http://${serverIP}:${apiPort}/client/blocklist`);
-
     if (data.version && data.blocklist) {
       const config = `### blueeye config ${data.version}`;
       const content = fs.readFileSync(hostsPath, 'utf8');
@@ -345,18 +344,16 @@ async function blockSitesIfNotMatched() {
         const joined = [
           '',
           '',
-          configHeader,
+          config,
           ...blockList,
           ''
         ].join(os.EOL);
-
         const tempFilePath = path.join(os.tmpdir(), 'blueeye_hosts_append.txt');
         fs.writeFileSync(tempFilePath, joined, 'utf8');
 
-        const cmd = platform() === 'win32'
+        const cmd = platform === 'win32'
           ? `type "${tempFilePath}" >> "${hostsPath}"`
           : `cat "${tempFilePath}" | tee -a "${hostsPath}"`;
-
         const options = { name: 'Wite' };
         sudo.exec(cmd, options, (error, stdout, stderr) => {
           if (error) {
@@ -426,6 +423,7 @@ ipcMain.on('hide-window', () => {
   if (win && !win.isDestroyed()) win.hide();
 });
 
+app.commandLine.appendSwitch('disable-d3d11');
 app.whenReady().then(async () => {
   if (platform === 'darwin') app.dock.hide();
   win = new BrowserWindow({
