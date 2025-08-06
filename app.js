@@ -549,20 +549,19 @@ client.on('message', async (msg, rinfo) => {
 });
 
 function disableUSBStoragesForWindows() {
-  if (platform === 'win32') {
-    // Command to disable USB storage
-    const cmd = 'sc config USBSTOR start= disabled && sc stop USBSTOR';
+  if (process.platform === 'win32') {
+    const options = {
+      name: 'Wite',
+    };
+    const cmd = `reg add "HKLM\\SYSTEM\\CurrentControlSet\\Services\\USBSTOR" /v Start /t REG_DWORD /d 4 /f`;
 
-    // Use the 'elevated' module to run the command as Administrator
-    elevated.exec(cmd, (error, stdout, stderr) => {
+    sudo.exec(cmd, options, (error, stdout, stderr) => {
       if (error) {
-        console.error('Failed to disable USB storage on Windows:', error);
+        console.error('❌ Failed to disable USB storage:', error);
       } else {
-        console.log('USB storage devices disabled on Windows.');
+        console.log('✅ USB storage disabled.');
       }
     });
-  } else {
-    console.warn('USB storage blocking is not supported on this OS.');
   }
 }
 
