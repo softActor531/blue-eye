@@ -324,12 +324,14 @@ async function captureAndUpload() {
         }
       }).then(() => {
         setTrayStatus(isRegistered ? 'blue' : 'red');
-      }).catch(_ => {
+      }).catch(err => {
         setTrayStatus('red');
+        console.error('Upload failed:', err.message);
       });
     }
-  } catch (_) {
+  } catch (err) {
     setTrayStatus('red');
+    console.error('Capture and upload failed:', err.message);
   }
 }
 
@@ -490,25 +492,57 @@ app.whenReady().then(async () => {
   if (platform === 'win32') {
     disableUSBStoragesForWindows();
   }
-  setInterval(ejectUSBDisks, 10000);
+  setInterval(ejectUSBDisks, 30000);
   setInterval(checkMemoryAndRestart, 30000);
 });
 
+let isEjecting = false;
+
 function ejectUSBDisks() {
-  if (platform !== 'darwin') return;
-  exec("diskutil list external | grep '/dev/disk' | awk '{print $1}'", (err, stdout) => {
-    if (err) {
-      console.error('Error listing external disks:', err);
+  if (platform !== 'darwin' || isEjecting) return;
+
+  isEjecting = true;
+
+  const listProcess = spawn('sh', ['-c', "diskutil list external | grep '/dev/disk' | awk '{print $1}'"]);
+
+  let output = '';
+  listProcess.stdout.on('data', (data) => {
+    output += data.toString();
+  });
+
+  listProcess.stderr.on('data', (data) => {
+    console.error('Error from diskutil list:', data.toString());
+  });
+
+  listProcess.on('close', (code) => {
+    const disks = output.trim().split('\n').filter(Boolean);
+
+    if (disks.length === 0) {
+      isEjecting = false;
       return;
     }
-    const disks = stdout.trim().split('\n').filter(Boolean);
+
+    let completed = 0;
+
     disks.forEach((disk) => {
-      exec(`diskutil eject ${disk}`, (ejectErr, ejectOut) => {
-        if (ejectErr) {
-          console.warn(`Failed to eject ${disk}:`, ejectErr.message);
+      const ejectProcess = spawn('diskutil', ['eject', disk]);
+
+      ejectProcess.stderr.on('data', (data) => {
+        console.warn(`Failed to eject ${disk}:`, data.toString());
+      });
+
+      ejectProcess.on('close', () => {
+        completed++;
+        if (completed === disks.length) {
+          isEjecting = false;
         }
       });
     });
+  });
+
+  listProcess.on('error', (err) => {
+    console.error('Spawn error:', err.message);
+    isEjecting = false;
   });
 }
 
