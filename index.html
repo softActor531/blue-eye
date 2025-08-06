@@ -7,7 +7,22 @@
     <span id="savedMsg" style="display:none; color:green; margin-left:10px;">Saved!</span>
   </div>
   <button id="recordButton">Start a call</button>
-  <div id="routers" style="margin-bottom: 2em;"></div>
+  <div id="routers" style="margin-bottom: 2em;">
+    <h4>Select a Router</h4>
+    <button id="refresh-btn">🔄 Refresh</button>
+    <table border="1" cellpadding="6" cellspacing="0" style="width:100%; border-collapse: collapse;">
+      <thead>
+        <tr style="background-color: #f0f0f0;">
+          <th style="text-align: left;">Router Name</th>
+          <th style="text-align: left;">Router Address</th>
+          <th style="text-align: left;">Ping 1</th>
+          <th style="text-align: left;">Ping 2</th>
+          <th style="text-align: left;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="router-body"></tbody>
+    </table>
+  </div>
   <div id="version-warning" style="display: none; color: #000; padding: 10px; margin: 10px; border-radius: 5px;">
     A new version is available. 
   </div>

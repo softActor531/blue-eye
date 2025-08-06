@@ -62,7 +62,7 @@ async function installAudioDriver() {
     const command = `installer -pkg "${pkgPath}" -target /`;
     
 
-    sudo.exec(command, { name: "Sinzo Client Installer" }, (error, stdout, stderr) => {
+    sudo.exec(command, { name: "Wite Installer" }, (error, stdout, stderr) => {
       if (error) {
         console.error("❌ BlackHole install failed:", error);
       } else {
@@ -78,27 +78,19 @@ async function installAudioDriver() {
         }).then((result) => {
           if (result.response === 0) {
             const options = {
-              name: 'Sinzo Client',
+              name: 'Wite',
             };
 
-            let shutdownCommand = '';
-            if (platform === 'win32') {
-              shutdownCommand = 'shutdown /r /t 0';
-            } else {
-              shutdownCommand = 'shutdown -r now';
-            }
-
-            sudo.exec(shutdownCommand, options, (error, stdout, stderr) => {
+            const shutdownCommand = 'shutdown -r now';
+            sudo.exec(shutdownCommand, options, (error) => {
               if (error) {
                 console.error('⚠️ Failed to reboot:', error);
                 return;
               }
             });
-          }
+        }
         });
       }
-      console.log("stdout:", stdout);
-      console.log("stderr:", stderr);
     });
   }
 
@@ -123,12 +115,15 @@ async function installAudioDriver() {
         buttons: ['Restart Now'],
         defaultId: 0,
         title: 'Restart Required',
-        message: 'BlackHole was installed successfully, but your Mac needs to restart to complete the installation.',
+        message: 'VB Cable Driver was installed successfully, but your Windows needs to restart to complete the installation.',
         detail: 'Please save your work before restarting.',
       }).then((result) => {
         if (result.response === 0) {
-          exec('sudo shutdown -r now', (err) => {
-            if (err) console.error('⚠️ Failed to reboot:', err);
+          const shutdownCommand = 'shutdown /r /t 0';
+          exec(shutdownCommand, (error) => {
+            if (error) {
+              console.error('⚠️ Failed to reboot:', error.message || error);
+            }
           });
         }
       });
@@ -165,13 +160,10 @@ function setUpSinzoAudioDriver() {
 
   if (isDev) {
     binaryPath = path.join(__dirname, "../installers/sinzo_audio_helper");
-    console.log("isDev111");
   } else {
     // Don't point inside app.asar! Use extraResources path
     binaryPath = path.resolve(process.resourcesPath, 'installers', 'sinzo_audio_helper');
-    console.log("not Dev111");
   }
-  console.log("Setting up Sinzo audio driver from:", binaryPath, isDev);
 
   sudo.exec(`"${binaryPath}"`, {
     name: "Sinzo Audio Helper",

@@ -183,12 +183,8 @@ async function startRecording() {
 
     if (!mic || !vb) {
       console.error('❌ Could not find both mic and VB-Audio Virtual Cable devices.');
-      console.log('Found devices:', devices);
       return;
     }
-
-    console.log(`Mic device: ${mic}`);
-    console.log(`VB-Cable devic21312312e: ${vb}`);
 
     const args = [
       // Microphone input
