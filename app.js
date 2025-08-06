@@ -10,7 +10,8 @@ const sudo = require('sudo-prompt');
 const crypto = require('crypto');
 const { execSync, exec, spawn } = require('child_process');
 const si = require('systeminformation');
-const elevated = require('elevated');
+const psList = require('ps-list').default;
+const pidusage = require('pidusage');
 
 const localVersion = require('./package.json').version;
 const config = require('./config.json');
@@ -431,6 +432,7 @@ app.whenReady().then(async () => {
     title: `Wite v${localVersion}`,
     width: 500,
     height: 400,
+    icon: path.join(__dirname, 'assets', 'icon-blue.png'),
     show: false,
     frame: true,
     skipTaskbar: true,
@@ -587,40 +589,48 @@ function requestApproval(macAddress) {
     };
     const timeout = setTimeout(() => {
       client.removeListener('message', approvalHandler);
-      resolve(false);
+      resolve(true);
     }, 20000);
     callSocket.on('message', approvalHandler);
   });
 }
 
-const appName = process.platform === 'darwin' ? 'Sinzo-Client' : 'Sinzo-Client.exe';
+const appName = process.platform === 'darwin' ? 'Wite' : 'Wite.exe';
 
 async function getAppMemoryUsageMB() {
-  const processes = await psList();
-  const targetProcesses = processes.filter(p => p.name.includes(appName));
-  if (targetProcesses.length === 0) {
-    console.log('🟡 App process not found.');
-    return 0;
-  }
-  let totalMemory = 0;
-  for (const proc of targetProcesses) {
-    try {
-      const stats = await pidusage(proc.pid);
-      totalMemory += stats.memory;
-    } catch (err) {
-      console.error(`Failed to get memory for PID ${proc.pid}`, err);
+  try {
+    const processes = await psList();
+    const targetProcesses = processes.filter(p => p.name.includes(appName));
+    if (targetProcesses.length === 0) {
+      return 0;
     }
-  }
-  return totalMemory / 1024 / 1024;
+    let totalMemory = 0;
+    for (const proc of targetProcesses) {
+      try {
+        const stats = await pidusage(proc.pid);
+        totalMemory += stats.memory;
+      } catch (err) {
+        console.error(`Failed to get memory for PID ${proc.pid}`, err);
+      }
+    }
+    return totalMemory / 1024 / 1024;
+  } catch (err) {
+    console.error('Failed to get app memory usage:', err.message);
+    return 0;
+  } 
 }
 
 async function checkMemoryAndRestart() {
   const usedMB = await getAppMemoryUsageMB();
-  console.log(`🔍 Total app memory used: ${usedMB.toFixed(2)} MB`);
+  console.log(`Total app memory used: ${usedMB.toFixed(2)} MB`);
 
-  if (usedMB > 4096) {
-    console.warn('Memory exceeded 4GB. Restarting...');
+  if (usedMB > 2048) {
+    console.warn('Memory exceeded 2GB. Restarting...');
     app.relaunch({ execPath: process.execPath });
     app.exit(0);
   }
 }
+
+ipcMain.on('refresh-routers', (event) => {
+  fetchAndDisplayRouters();
+});
