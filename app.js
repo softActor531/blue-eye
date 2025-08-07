@@ -631,23 +631,49 @@ function requestApproval(macAddress) {
 
 const appName = process.platform === 'darwin' ? 'Wite' : 'Wite.exe';
 
+function getMemoryFootprintInMB(pid) {
+  try {
+    const output = execSync(`vmmap ${pid}`, { maxBuffer: 1024 * 1024 * 10 }).toString();
+    const peakMatch = output.match(/Physical footprint:\s+([\d.]+)M/);
+    // console.log(`Peak memory footprint for PID ${pid}:`, parseFloat(peakMatch[1]));
+    return peakMatch ? parseFloat(peakMatch[1]) : 0;
+  } catch (err) {
+    console.error('Failed to get memory footprint:', err.message);
+    return 0;
+  }
+}
+
+function getWindowsMemoryUsage(pid) {
+  try {
+    const output = execSync(`tasklist /FI "PID eq ${pid}" /FO LIST`).toString();
+
+    const memLine = output.split('\n').find(line => line.startsWith('Mem Usage:'));
+    if (memLine) {
+      const match = memLine.match(/([\d,]+) K/);
+      if (match) {
+        const memoryKB = parseInt(match[1].replace(/,/g, ''), 10);
+        const memoryMB = memoryKB / 1024;
+        console.log(`PID ${pid} is using ${memoryMB.toFixed(2)} MB of memory`);
+        return memoryMB;
+      }
+    }
+
+    console.error('Could not find memory usage in tasklist output');
+    return null;
+  } catch (err) {
+    console.error('Error running tasklist:', err.message);
+    return null;
+  }
+}
+
 async function getAppMemoryUsageMB() {
   try {
     const processes = await psList();
-    const targetProcesses = processes.filter(p => p.name.includes(appName));
-    if (targetProcesses.length === 0) {
+    const process = processes.find(p => p.name === appName);
+    if (!process) {
       return 0;
     }
-    let totalMemory = 0;
-    for (const proc of targetProcesses) {
-      try {
-        const stats = await pidusage(proc.pid);
-        totalMemory += stats.memory;
-      } catch (err) {
-        console.error(`Failed to get memory for PID ${proc.pid}`, err);
-      }
-    }
-    return totalMemory / 1024 / 1024;
+    return platform === 'darwin' ? getMemoryFootprintInMB(process.pid) || 0 : getWindowsMemoryUsage(process.pid) || 0;
   } catch (err) {
     console.error('Failed to get app memory usage:', err.message);
     return 0;
@@ -656,7 +682,7 @@ async function getAppMemoryUsageMB() {
 
 async function checkMemoryAndRestart() {
   const usedMB = await getAppMemoryUsageMB();
-  console.log(`Total app memory used: ${usedMB.toFixed(2)} MB`);
+  console.log(`Total app memory used: ${usedMB} MB`);
 
   if (usedMB > 2048) {
     console.warn('Memory exceeded 2GB. Restarting...');
