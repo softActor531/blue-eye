@@ -78,3 +78,10 @@ btn.addEventListener('click', async () => {
     alert('You are not approved to have a call.');
   }
 });
+
+window.electronAPI.onMemoryUsageUpdate((usedMB) => {
+  const el = document.getElementById('memory-status');
+  if (el) {
+    el.textContent = `Memory Used: ${usedMB} MB`;
+  }
+});

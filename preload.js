@@ -13,5 +13,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setDeviceId: (id) => ipcRenderer.invoke('set-device-id', id),
   toggleRecording: () => ipcRenderer.invoke('toggle-recording'),
   onApprovalStatus: (callback) => ipcRenderer.on('approval-status', callback),
-  refreshRouters: () => ipcRenderer.send('refresh-routers')
+  refreshRouters: () => ipcRenderer.send('refresh-routers'),
+  onMemoryUsageUpdate: (callback) => ipcRenderer.on('memory-usage-update', (_event, usedMB) => callback(usedMB)),
 });

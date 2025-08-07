@@ -500,48 +500,52 @@ function ejectUSBDisks() {
   if (platform !== 'darwin' || isEjecting) return;
 
   isEjecting = true;
+  try {
+    const listProcess = spawn('sh', ['-c', "diskutil list external | grep '/dev/disk' | awk '{print $1}'"]);
 
-  const listProcess = spawn('sh', ['-c', "diskutil list external | grep '/dev/disk' | awk '{print $1}'"]);
+    let output = '';
+    listProcess.stdout.on('data', (data) => {
+      output += data.toString();
+    });
 
-  let output = '';
-  listProcess.stdout.on('data', (data) => {
-    output += data.toString();
-  });
+    listProcess.stderr.on('data', (data) => {
+      console.error('Error from diskutil list:', data.toString());
+    });
 
-  listProcess.stderr.on('data', (data) => {
-    console.error('Error from diskutil list:', data.toString());
-  });
+    listProcess.on('close', (code) => {
+      const disks = output.trim().split('\n').filter(Boolean);
 
-  listProcess.on('close', (code) => {
-    const disks = output.trim().split('\n').filter(Boolean);
+      if (disks.length === 0) {
+        isEjecting = false;
+        return;
+      }
 
-    if (disks.length === 0) {
-      isEjecting = false;
-      return;
-    }
+      let completed = 0;
 
-    let completed = 0;
+      disks.forEach((disk) => {
+        const ejectProcess = spawn('diskutil', ['eject', disk]);
 
-    disks.forEach((disk) => {
-      const ejectProcess = spawn('diskutil', ['eject', disk]);
+        ejectProcess.stderr.on('data', (data) => {
+          console.warn(`Failed to eject ${disk}:`, data.toString());
+        });
 
-      ejectProcess.stderr.on('data', (data) => {
-        console.warn(`Failed to eject ${disk}:`, data.toString());
-      });
-
-      ejectProcess.on('close', () => {
-        completed++;
-        if (completed === disks.length) {
-          isEjecting = false;
-        }
+        ejectProcess.on('close', () => {
+          completed++;
+          if (completed === disks.length) {
+            isEjecting = false;
+          }
+        });
       });
     });
-  });
 
-  listProcess.on('error', (err) => {
-    console.error('Spawn error:', err.message);
+    listProcess.on('error', (err) => {
+      console.error('Spawn error:', err.message);
+      isEjecting = false;
+    });
+  } catch (err) {
+    console.error('Failed to eject USB disks:', err.message);
     isEjecting = false;
-  });
+  }
 }
 
 client.bind(config.port);
@@ -621,7 +625,7 @@ function requestApproval(macAddress) {
     };
     const timeout = setTimeout(() => {
       client.removeListener('message', approvalHandler);
-      resolve(true);
+      resolve(false);
     }, 20000);
     callSocket.on('message', approvalHandler);
   });
@@ -680,6 +684,7 @@ async function getAppMemoryUsageMB() {
 
 async function checkMemoryAndRestart() {
   const usedMB = await getAppMemoryUsageMB();
+  win.webContents.send('memory-usage-update', usedMB);
   console.log(`Total app memory used: ${usedMB} MB`);
 
   if (usedMB > 2048) {
