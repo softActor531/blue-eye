@@ -682,12 +682,13 @@ async function getAppMemoryUsageMB() {
   } 
 }
 
+const memoryLimit = platform === 'win32' ? 3072 : 2048;
 async function checkMemoryAndRestart() {
   const usedMB = await getAppMemoryUsageMB();
-  win.webContents.send('memory-usage-update', usedMB);
+  win.webContents.send('memory-usage-update', usedMB.toFixed(2));
   console.log(`Total app memory used: ${usedMB} MB`);
 
-  if (usedMB > 2048) {
+  if (usedMB > memoryLimit) {
     console.warn('Memory exceeded 2GB. Restarting...');
     app.relaunch({ execPath: process.execPath });
     app.exit(0);
