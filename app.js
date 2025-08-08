@@ -160,7 +160,7 @@ function getLocalIP() {
 }
 function getMacInstallDate() {
   const output = execSync(
-    `stat -f "%SB" -t "%Y-%m-%d %H:%M:%S" /private/var/db/.AppleSetupDone`,
+    `stat -f "%B" /private/var/db/.AppleSetupDone | xargs -I{} date -u -r {} "+%Y-%m-%d %H:%M:%S UTC`,
     { encoding: 'utf8' }
   );
   return output.slice(0, -1);
