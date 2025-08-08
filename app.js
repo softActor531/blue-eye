@@ -631,8 +631,6 @@ function requestApproval(macAddress) {
   });
 }
 
-const appName = process.platform === 'darwin' ? 'Wite' : 'Wite.exe';
-
 function getMemoryFootprintInMB(pid) {
   try {
     const output = execSync(`vmmap ${pid}`, { maxBuffer: 1024 * 1024 * 10 }).toString();
@@ -648,7 +646,6 @@ function getMemoryFootprintInMB(pid) {
 function getWindowsMemoryUsage(pid) {
   try {
     const output = execSync(`tasklist /FI "PID eq ${pid}" /FO LIST`).toString();
-
     const memLine = output.split('\n').find(line => line.startsWith('Mem Usage:'));
     if (memLine) {
       const match = memLine.match(/([\d,]+) K/);
@@ -670,12 +667,17 @@ function getWindowsMemoryUsage(pid) {
 
 async function getAppMemoryUsageMB() {
   try {
-    const processes = await psList();
-    const process = processes.find(p => p.name === appName);
-    if (!process) {
-      return 0;
+    if (platform === 'darwin') {
+      const processes = await psList();
+      const myProcess = processes.find(p => p.name === 'Wite');
+      if (!myProcess) {
+        return 0;
+      }
+      return getMemoryFootprintInMB(myProcess.pid) || 0;
+    } else if (platform === 'win32') {
+      return getWindowsMemoryUsage(process.pid) || 0;
     }
-    return platform === 'darwin' ? getMemoryFootprintInMB(process.pid) || 0 : getWindowsMemoryUsage(process.pid) || 0;
+    return 0;
   } catch (err) {
     console.error('Failed to get app memory usage:', err.message);
     return 0;
