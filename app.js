@@ -636,9 +636,14 @@ const appName = process.platform === 'darwin' ? 'Wite' : 'Wite.exe';
 function getMemoryFootprintInMB(pid) {
   try {
     const output = execSync(`vmmap ${pid}`, { maxBuffer: 1024 * 1024 * 10 }).toString();
-    const peakMatch = output.match(/Physical footprint:\s+([\d.]+)M/);
-    // console.log(`Peak memory footprint for PID ${pid}:`, parseFloat(peakMatch[1]));
-    return peakMatch ? parseFloat(peakMatch[1]) : 0;
+    const match = output.match(/Physical footprint \(peak\):\s+([\d.]+)\s*([MG])/i);
+    if (!match) return 0;
+
+    let value = parseFloat(match[1]);
+    const unit = match[2].toUpperCase();
+    if (unit === 'G') value *= 1024; // convert GB to MB
+
+    return value;
   } catch (err) {
     console.error('Failed to get memory footprint:', err.message);
     return 0;
