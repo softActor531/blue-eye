@@ -1,33 +1,201 @@
 <!DOCTYPE html>
 <html>
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body {
+      font-family: "Segoe UI", Roboto, Arial, sans-serif;
+      background-color: #1e1e1e;
+      margin: 0;
+      padding: 15px;
+      color: #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+    }
+
+    h4 {
+      font-size: 1.1em;
+      color: #ffffff;
+      margin: 0 0 8px;
+      text-align: center;
+    }
+
+    /* Card Containers */
+    .card {
+      background-color: #252526;
+      border-radius: 8px;
+      padding: 12px;
+      width: 100%;
+      box-sizing: border-box;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Input + Button Row */
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      padding: 8px 10px;
+      font-size: 13px;
+      border: 1px solid #444;
+      background-color: #2c2c2c;
+      color: #fff;
+      border-radius: 6px;
+      outline: none;
+      transition: border-color 0.2s, background-color 0.2s;
+    }
+
+    input[type="text"]:focus {
+      border-color: #0078d7;
+      background-color: #333;
+    }
+
+    button {
+      padding: 7px 12px;
+      font-size: 13px;
+      background-color: #0078d7;
+      border: none;
+      border-radius: 6px;
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      white-space: nowrap;
+    }
+
+    button:hover {
+      background-color: #005fa3;
+    }
+
+    #recordButton {
+      background-color: #28a745;
+      font-weight: bold;
+      width: 100%;
+    }
+
+    #recordButton:hover {
+      background-color: #1f8635;
+    }
+
+    #refresh-btn {
+      background-color: #6c757d;
+      width: 100%;
+    }
+
+    #refresh-btn:hover {
+      background-color: #555d63;
+    }
+
+    /* Table Styling */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background-color: #2d2d2d;
+      border-radius: 6px;
+      overflow: hidden;
+      font-size: 12px;
+      max-height: 170px;
+    }
+
+    th, td {
+      padding: 8px;
+      text-align: left;
+      border-bottom: 1px solid #3a3a3a;
+    }
+
+    th {
+      background-color: #1f1f1f;
+      color: #ccc;
+    }
+
+    tr:hover td {
+      background-color: #333;
+    }
+
+    /* Version Warning */
+    #version-warning {
+      background-color: #3b2f15;
+      border: 1px solid #856404;
+      color: #ffdd57;
+      padding: 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    #download-link {
+      display: block;
+      padding: 6px 10px;
+      margin-top: 6px;
+      background-color: #17a2b8;
+      color: white;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 12px;
+      text-align: center;
+      transition: background-color 0.2s;
+    }
+
+    #download-link:hover {
+      background-color: #117a8b;
+    }
+
+    #memory-status {
+      font-size: 12px;
+      color: #aaa;
+      font-weight: bold;
+      text-align: center;
+    }
+  </style>
+</head>
 <body>
-  <div style="margin-bottom: 2em;">
-    <input type="text" id="deviceIdInput" placeholder="Enter Device ID" />
-    <button id="saveDeviceIdBtn">Save Device ID</button>
-    <span id="savedMsg" style="display:none; color:green; margin-left:10px;">Saved!</span>
+
+  <!-- Device ID -->
+  <div class="card">
+    <div class="row">
+      <input type="text" id="deviceIdInput" placeholder="Enter Device ID" />
+      <button id="saveDeviceIdBtn">Save</button>
+    </div>
+    <span id="savedMsg" style="display:none; color:#4caf50; font-size:12px; margin-top:5px; display:block; text-align:center;">Saved!</span>
   </div>
-  <button id="recordButton">Start a call</button>
-  <div id="routers" style="margin-bottom: 2em;">
+
+  <!-- Start Call Button -->
+  <button id="recordButton">Start a Call</button>
+
+  <!-- Routers -->
+  <div class="card">
     <h4>Select a Router</h4>
-    <button id="refresh-btn" style="margin-bottom: 1em;">🔄 Refresh</button>
-    <table border="1" cellpadding="6" cellspacing="0" style="width:100%; border-collapse: collapse;">
-      <thead>
-        <tr style="background-color: #f0f0f0;">
-          <th style="text-align: left;">Router Name</th>
-          <th style="text-align: left;">Router Address</th>
-          <th style="text-align: left;">Ping 1</th>
-          <th style="text-align: left;">Ping 2</th>
-          <th style="text-align: left;">Action</th>
-        </tr>
-      </thead>
-      <tbody id="router-body"></tbody>
-    </table>
+    <button id="refresh-btn">🔄 Refresh</button>
+    <div style="overflow-y: auto; margin-top: 8px;">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Address</th>
+            <th>Ping 1</th>
+            <th>Ping 2</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="router-body"></tbody>
+      </table>
+    </div>
   </div>
-  <div id="version-warning" style="display: none; color: #000; padding: 10px; margin: 10px; border-radius: 5px;">
+
+  <!-- Version Update -->
+  <div id="version-warning" style="display: none;">
     A new version is available. 
   </div>
   <a id="download-link" style="display: none;" href="#" target="_blank">Click here to download</a>
+
+  <!-- Memory Status -->
   <div id="memory-status">Memory Used: Loading...</div>
+
   <script src="renderer.js"></script>
 </body>
 </html>

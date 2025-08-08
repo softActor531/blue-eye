@@ -1,6 +1,6 @@
 {
   "name": "wite",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "productName": "Wite",
   "description": "",
   "main": "app.js",
@@ -44,6 +44,7 @@
       "preload.js",
       "recording.js",
       "renderer.js",
+      "installers/footprint.node",
       "utils/driverInstaller.js",
       "scripts/*.*",
       "assets/*.png",

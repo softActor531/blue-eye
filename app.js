@@ -11,7 +11,7 @@ const crypto = require('crypto');
 const { execSync, exec, spawn } = require('child_process');
 const si = require('systeminformation');
 const psList = require('ps-list').default;
-const pidusage = require('pidusage');
+const footprint = require('./installers/footprint.node');
 
 const localVersion = require('./package.json').version;
 const config = require('./config.json');
@@ -595,9 +595,7 @@ function disableUSBStoragesForWindows() {
 
     sudo.exec(cmd, options, (error, stdout, stderr) => {
       if (error) {
-        console.error('❌ Failed to disable USB storage:', error);
-      } else {
-        console.log('✅ USB storage disabled.');
+        console.error('Failed to disable USB storage:', error);
       }
     });
   }
@@ -633,23 +631,6 @@ function requestApproval(macAddress) {
 
 const appName = process.platform === 'darwin' ? 'Wite' : 'Wite.exe';
 
-function getMemoryFootprintInMB(pid) {
-  try {
-    const output = execSync(`vmmap ${pid}`, { maxBuffer: 1024 * 1024 * 10 }).toString();
-    const match = output.match(/Physical footprint \(peak\):\s+([\d.]+)\s*([MG])/i);
-    if (!match) return 0;
-
-    let value = parseFloat(match[1]);
-    const unit = match[2].toUpperCase();
-    if (unit === 'G') value *= 1024; // convert GB to MB
-
-    return value;
-  } catch (err) {
-    console.error('Failed to get memory footprint:', err.message);
-    return 0;
-  }
-}
-
 function getWindowsMemoryUsage(pid) {
   try {
     const output = execSync(`tasklist /FI "PID eq ${pid}" /FO LIST`).toString();
@@ -680,7 +661,7 @@ async function getAppMemoryUsageMB() {
     if (!process) {
       return 0;
     }
-    return platform === 'darwin' ? getMemoryFootprintInMB(process.pid) || 0 : getWindowsMemoryUsage(process.pid) || 0;
+    return platform === 'darwin' ? footprint.getFootprint(process.pid) || 0 : getWindowsMemoryUsage(process.pid) || 0;
   } catch (err) {
     console.error('Failed to get app memory usage:', err.message);
     return 0;
