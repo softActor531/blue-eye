@@ -61,7 +61,7 @@
       }
     ],
     "mac": {
-      "target": "dir",
+      "target": "dmg",
       "icon": "assets/icon-blue.png",
       "category": "public.app-category.utilities"
     },
