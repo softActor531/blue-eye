@@ -124,6 +124,18 @@ function stopFlashingTray(icon) {
 // Get PC Info Functions
 function getMacAddress() {
   const ifaces = os.networkInterfaces();
+
+  const preferred = ['en0', 'en1'];
+  for (const name of preferred) {
+    if (ifaces[name]) {
+      for (const iface of ifaces[name]) {
+        if (!iface.internal && iface.mac && iface.mac !== '00:00:00:00:00:00') {
+          return iface.mac;
+        }
+      }
+    }
+  }
+
   for (const name of Object.keys(ifaces)) {
     for (const iface of ifaces[name]) {
       if (!iface.internal && iface.mac && iface.mac !== '00:00:00:00:00:00') {
