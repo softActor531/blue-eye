@@ -5,7 +5,7 @@
   "description": "",
   "main": "app.js",
   "scripts": {
-    "postinstall": "electron-builder install-app-deps",
+    "postinstall": "electron-builder install-app-deps && node scripts/copy-footprint.js",
     "start": "cross-env NODE_NO_WARNINGS=1 electron .",
     "build": "electron-builder",
     "build:mac": "electron-builder --mac",
@@ -44,7 +44,7 @@
       "preload.js",
       "recording.js",
       "renderer.js",
-      "installers/footprint.node",
+      "installers/*",
       "utils/driverInstaller.js",
       "scripts/*.*",
       "assets/*.png",
